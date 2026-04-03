@@ -1,22 +1,17 @@
 import makeWASocket, {
-  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   Browsers,
+  BufferJSON,
+  initAuthCreds,
   type WASocket,
+  type SignalDataTypeMap,
+  type AuthenticationCreds,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
-import path from "path";
-import { mkdirSync, existsSync } from "fs";
 import { eq } from "drizzle-orm";
-import { db, botsTable } from "@workspace/db";
-
-const SESSIONS_DIR = path.join(process.cwd(), "sessions");
-
-if (!existsSync(SESSIONS_DIR)) {
-  mkdirSync(SESSIONS_DIR, { recursive: true });
-}
+import { db, botsTable, whatsappAuthTable } from "@workspace/db";
 
 interface SessionEntry {
   socket: WASocket | null;
@@ -26,12 +21,6 @@ interface SessionEntry {
 }
 
 const activeSessions = new Map<string, SessionEntry>();
-
-function getSessionDir(userId: string) {
-  const dir = path.join(SESSIONS_DIR, userId.replace(/[^a-zA-Z0-9_-]/g, "_"));
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 function getOrCreateEntry(userId: string): SessionEntry {
   if (!activeSessions.has(userId)) {
@@ -62,7 +51,6 @@ function jidFromPhone(phoneOrJid: string): string {
 async function sendStartupMessage(sock: WASocket, userId: string, selfJid: string) {
   try {
     const prefix = await getBotPrefix(userId);
-
     const msg =
       `*NUTTER-XMD* is now *online* 🟢\n\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
@@ -73,10 +61,8 @@ async function sendStartupMessage(sock: WASocket, userId: string, selfJid: strin
       `▸ \`${prefix}ping\` — Check bot speed\n` +
       `▸ \`${prefix}test\` — Run a system test\n\n` +
       `_Powered by NUTTER-XMD_ ⚡`;
-
     await sock.sendMessage(selfJid, { text: msg });
-  } catch {
-  }
+  } catch {}
 }
 
 async function handleCommand(
@@ -114,13 +100,90 @@ async function handleCommand(
   }
 }
 
+// ─── Database-backed auth state ──────────────────────────────────────────────
+
+async function useDatabaseAuthState(userId: string) {
+  const rows = await db
+    .select()
+    .from(whatsappAuthTable)
+    .where(eq(whatsappAuthTable.userId, userId))
+    .limit(1);
+
+  const existing = rows[0];
+
+  const creds: AuthenticationCreds = existing?.creds
+    ? JSON.parse(existing.creds, BufferJSON.reviver)
+    : initAuthCreds();
+
+  const keysMap: Record<string, any> = existing?.keys
+    ? JSON.parse(existing.keys, BufferJSON.reviver)
+    : {};
+
+  async function persistToDb() {
+    const credsStr = JSON.stringify(creds, BufferJSON.replacer);
+    const keysStr = JSON.stringify(keysMap, BufferJSON.replacer);
+    await db
+      .insert(whatsappAuthTable)
+      .values({ userId, creds: credsStr, keys: keysStr })
+      .onConflictDoUpdate({
+        target: whatsappAuthTable.userId,
+        set: { creds: credsStr, keys: keysStr },
+      });
+  }
+
+  const keys = {
+    get: async <T extends keyof SignalDataTypeMap>(
+      type: T,
+      ids: string[]
+    ): Promise<{ [id: string]: SignalDataTypeMap[T] }> => {
+      const result: { [id: string]: SignalDataTypeMap[T] } = {};
+      for (const id of ids) {
+        const val = keysMap[`${type}/${id}`];
+        if (val !== undefined) result[id] = val;
+      }
+      return result;
+    },
+    set: async (data: {
+      [T in keyof SignalDataTypeMap]?: { [id: string]: SignalDataTypeMap[T] | null };
+    }) => {
+      for (const type in data) {
+        const entries = (data as any)[type];
+        for (const id in entries) {
+          const val = entries[id];
+          const k = `${type}/${id}`;
+          if (val != null) {
+            keysMap[k] = val;
+          } else {
+            delete keysMap[k];
+          }
+        }
+      }
+      await persistToDb();
+    },
+  };
+
+  return {
+    state: { creds, keys },
+    saveCreds: async () => {
+      await persistToDb();
+    },
+  };
+}
+
+export async function clearDatabaseAuthState(userId: string) {
+  await db
+    .delete(whatsappAuthTable)
+    .where(eq(whatsappAuthTable.userId, userId));
+}
+
+// ─── Socket lifecycle ─────────────────────────────────────────────────────────
+
 async function startSocket(
   userId: string,
   entry: SessionEntry,
   onStatusChange?: (status: "offline" | "connecting" | "online") => void
 ): Promise<WASocket> {
-  const sessionDir = getSessionDir(userId);
-  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  const { state, saveCreds } = await useDatabaseAuthState(userId);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -173,20 +236,22 @@ async function startSocket(
     }
 
     if (connection === "close") {
-      const shouldReconnect =
-        (lastDisconnect?.error as Boom)?.output?.statusCode !==
-        DisconnectReason.loggedOut;
+      const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
+      const loggedOut = reason === DisconnectReason.loggedOut;
 
       entry.status = "offline";
       entry.qrCode = null;
       entry.socket = null;
       onStatusChange?.("offline");
 
-      if (shouldReconnect) {
-        const newEntry = getOrCreateEntry(userId);
-        await startSocket(userId, newEntry, onStatusChange);
-      } else {
+      if (loggedOut) {
+        // Wipe stored credentials so user must re-pair
+        await clearDatabaseAuthState(userId);
         activeSessions.delete(userId);
+      } else {
+        // Reconnect — credentials stay in DB
+        const newEntry = getOrCreateEntry(userId);
+        setTimeout(() => startSocket(userId, newEntry, onStatusChange), 3000);
       }
     }
 
@@ -195,7 +260,6 @@ async function startSocket(
       entry.qrCode = null;
       onStatusChange?.("online");
 
-      // Update bot status in DB
       try {
         const selfId = sock.user?.id;
         await db
@@ -207,7 +271,6 @@ async function startSocket(
           .where(eq(botsTable.userId, userId));
       } catch {}
 
-      // Send startup message to self
       if (sock.user?.id) {
         const selfJid = jidFromPhone(sock.user.id);
         setTimeout(() => sendStartupMessage(sock, userId, selfJid), 2000);
@@ -215,13 +278,11 @@ async function startSocket(
     }
   });
 
-  // Message handler — process commands
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
     for (const msg of messages) {
       if (!msg.message) continue;
-      // Skip status broadcasts and empty JIDs
       if (!msg.key.remoteJid || msg.key.remoteJid === "status@broadcast") continue;
 
       const body =
@@ -232,18 +293,46 @@ async function startSocket(
       if (!body.trim()) continue;
 
       const prefix = await getBotPrefix(userId);
-
       if (!body.startsWith(prefix)) continue;
 
       const jid = msg.key.remoteJid;
       const sentAt = (msg.messageTimestamp as number) * 1000 || Date.now();
-
       await handleCommand(sock, userId, jid, body, prefix, sentAt);
     }
   });
 
   return sock;
 }
+
+// ─── Auto-reconnect on server startup ────────────────────────────────────────
+
+export async function reconnectAllSavedSessions() {
+  try {
+    const saved = await db.select().from(whatsappAuthTable);
+    if (saved.length === 0) return;
+
+    console.log(`[whatsapp] Auto-reconnecting ${saved.length} saved session(s)...`);
+
+    for (const row of saved) {
+      // Only reconnect if creds exist (means user has paired before)
+      if (!row.creds) continue;
+
+      const entry = getOrCreateEntry(row.userId);
+      if (entry.socket) continue; // already running
+
+      startSocket(row.userId, entry).catch((err) => {
+        console.error(`[whatsapp] Failed to reconnect session for ${row.userId}:`, err);
+      });
+
+      // Stagger reconnects to avoid flooding WhatsApp
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  } catch (err) {
+    console.error("[whatsapp] Auto-reconnect error:", err);
+  }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function requestQRCode(
   userId: string
@@ -307,11 +396,16 @@ export async function disconnectSession(userId: string): Promise<void> {
   }
   activeSessions.delete(userId);
 
-  const sessionDir = getSessionDir(userId);
-  if (existsSync(sessionDir)) {
-    const { rm } = await import("fs/promises");
-    await rm(sessionDir, { recursive: true, force: true });
-  }
+  // Wipe credentials from DB so bot won't auto-reconnect
+  await clearDatabaseAuthState(userId);
+
+  // Also clear the bot status
+  try {
+    await db
+      .update(botsTable)
+      .set({ status: "offline", phoneNumber: null })
+      .where(eq(botsTable.userId, userId));
+  } catch {}
 }
 
 export function getSessionStatus(userId: string): "offline" | "connecting" | "online" {

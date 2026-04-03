@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { reconnectAllSavedSessions } from "./lib/whatsapp";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,9 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Restore all previously-paired WhatsApp sessions from the database
+  reconnectAllSavedSessions().catch((err) => {
+    logger.error({ err }, "Auto-reconnect failed");
+  });
 });
