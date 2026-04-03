@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, botsTable, whatsappAuthTable } from "@workspace/db";
+import { db, botsTable, whatsappAuthTable, botCommandsTable } from "@workspace/db";
 import { AdminLoginBody } from "@workspace/api-zod";
 import { createClerkClient } from "@clerk/express";
+import { disconnectSession } from "../lib/whatsapp";
 
 const router: IRouter = Router();
 
@@ -109,7 +110,7 @@ router.post("/admin/bots/:id/deactivate", requireAdminAuth, async (req: any, res
   res.json(bot);
 });
 
-// ── Delete (removes bot + WhatsApp session) ───────────────────────────────────
+// ── Delete (wipes user completely: session, DB rows, Clerk account) ───────────
 router.delete("/admin/bots/:id", requireAdminAuth, async (req: any, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -117,10 +118,22 @@ router.delete("/admin/bots/:id", requireAdminAuth, async (req: any, res): Promis
   const [bot] = await db.select().from(botsTable).where(eq(botsTable.id, id)).limit(1);
   if (!bot) { res.status(404).json({ error: "Bot not found" }); return; }
 
-  // Clear WhatsApp auth session from DB
+  // 1. Kill the active WhatsApp socket so the session closes cleanly
+  try { await disconnectSession(bot.userId); } catch {}
+
+  // 2. Wipe all database rows for this user (child rows first)
+  await db.delete(botCommandsTable).where(eq(botCommandsTable.botId, id));
   await db.delete(whatsappAuthTable).where(eq(whatsappAuthTable.userId, bot.userId));
-  // Delete the bot record
   await db.delete(botsTable).where(eq(botsTable.id, id));
+
+  // 3. Delete the Clerk account so the user cannot log back in
+  try {
+    const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+    await clerk.users.deleteUser(bot.userId);
+  } catch (err: any) {
+    // Log but don't fail the request — DB rows are already gone
+    console.warn("[admin] Could not delete Clerk user:", err?.message ?? err);
+  }
 
   res.status(204).send();
 });
