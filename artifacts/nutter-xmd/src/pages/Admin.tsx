@@ -1,39 +1,53 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  TerminalSquare,
-  Shield,
-  Bot,
-  Users,
-  Activity,
-  Zap,
-  Command,
-  LogOut,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Lock,
-  Eye,
-  EyeOff,
+  TerminalSquare, Shield, Bot, Users, Activity, Zap, LogOut,
+  CheckCircle, XCircle, Loader2, Lock, Eye, EyeOff, Trash2,
+  ChevronDown, ChevronRight, Phone, Mail, Settings, Wifi, WifiOff,
+  AlertTriangle, Ban,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 const ADMIN_TOKEN_KEY = "admin_token";
 
-type AdminBot = {
+type AdminUser = {
   id: number;
   userId: string;
   name: string;
   status: string;
   isActive: boolean;
   phoneNumber: string | null;
+  prefix: string;
+  mode: string;
   createdAt: string;
   updatedAt: string;
+  // Clerk
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  // Settings
+  autoReply: boolean;
+  autoReplyMessage: string | null;
+  antiCall: boolean;
+  antiLink: boolean;
+  antiSpam: boolean;
+  antiSticker: boolean;
+  antiTag: boolean;
+  antiBadWord: boolean;
+  badWords: string | null;
+  welcomeMessage: boolean;
+  goodbyeMessage: boolean;
+  autoRead: boolean;
+  typingStatus: boolean;
+  alwaysOnline: boolean;
+  autoViewStatus: boolean;
+  autoLikeStatus: boolean;
 };
 
 type AdminStats = {
@@ -41,7 +55,7 @@ type AdminStats = {
   totalBots: number;
   activeBots: number;
   onlineBots: number;
-  totalCommands: number;
+  suspendedBots: number;
 };
 
 async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -62,54 +76,294 @@ async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    online: { label: "ONLINE", cls: "bg-primary/20 text-primary border-primary/30" },
-    offline: { label: "OFFLINE", cls: "bg-muted/50 text-muted-foreground border-border" },
-    connecting: { label: "CONNECTING", cls: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-    banned: { label: "BANNED", cls: "bg-destructive/20 text-destructive border-destructive/30" },
-  };
-  const s = map[status] ?? map.offline;
+function WaStatusBadge({ status }: { status: string }) {
+  if (status === "online") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded border bg-green-500/10 text-green-400 border-green-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        ONLINE
+      </span>
+    );
+  }
+  if (status === "connecting") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded border bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+        CONNECTING
+      </span>
+    );
+  }
   return (
-    <span className={`text-xs px-2 py-0.5 rounded border font-mono flex items-center gap-1.5 ${s.cls}`}>
-      {status === "online" && <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
-      {s.label}
+    <span className="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded border bg-muted/40 text-muted-foreground border-border/50">
+      <WifiOff className="w-3 h-3" />
+      OFFLINE
     </span>
+  );
+}
+
+function SettingPill({ label, on }: { label: string; on: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-mono ${
+      on
+        ? "bg-primary/10 text-primary border-primary/30"
+        : "bg-muted/30 text-muted-foreground/50 border-border/30"
+    }`}>
+      {on ? <CheckCircle className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
+      {label}
+    </span>
+  );
+}
+
+function UserRow({ user, onAction }: { user: AdminUser; onAction: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const activate = useMutation({
+    mutationFn: () => adminFetch<AdminUser>(`/api/admin/bots/${user.id}/activate`, { method: "POST" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin"] }); toast({ title: "User activated" }); onAction(); },
+    onError: () => toast({ title: "Failed to activate", variant: "destructive" }),
+  });
+
+  const suspend = useMutation({
+    mutationFn: () => adminFetch<AdminUser>(`/api/admin/bots/${user.id}/deactivate`, { method: "POST" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin"] }); toast({ title: "User suspended" }); onAction(); },
+    onError: () => toast({ title: "Failed to suspend", variant: "destructive" }),
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: () => adminFetch<void>(`/api/admin/bots/${user.id}`, { method: "DELETE" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin"] }); toast({ title: "User deleted" }); onAction(); },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+  });
+
+  const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "—";
+  const joinDate = new Date(user.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+  const settings = [
+    { label: "Anti-Call", on: user.antiCall },
+    { label: "Anti-Link", on: user.antiLink },
+    { label: "Anti-Spam", on: user.antiSpam },
+    { label: "Anti-Sticker", on: user.antiSticker },
+    { label: "Anti-Tag", on: user.antiTag },
+    { label: "Anti-Bad Word", on: user.antiBadWord },
+    { label: "Auto-Read", on: user.autoRead },
+    { label: "Auto-Reply", on: user.autoReply },
+    { label: "Welcome Msg", on: user.welcomeMessage },
+    { label: "Goodbye Msg", on: user.goodbyeMessage },
+    { label: "Typing Status", on: user.typingStatus },
+    { label: "Always Online", on: user.alwaysOnline },
+    { label: "View Status", on: user.autoViewStatus },
+    { label: "Like Status", on: user.autoLikeStatus },
+  ];
+
+  return (
+    <>
+      <tr
+        className="hover:bg-secondary/20 transition-colors cursor-pointer border-b border-border/30"
+        onClick={() => setExpanded((p) => !p)}
+        data-testid={`row-admin-user-${user.id}`}
+      >
+        {/* Expand toggle */}
+        <td className="py-3 px-3 w-6">
+          {expanded
+            ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+        </td>
+
+        {/* User identity */}
+        <td className="py-3 px-3">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="font-medium text-sm truncate">{displayName}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+              <Mail className="w-3 h-3 shrink-0" />
+              {user.email ?? <span className="italic opacity-50">no email</span>}
+            </span>
+          </div>
+        </td>
+
+        {/* Phone */}
+        <td className="py-3 px-3 hidden md:table-cell">
+          <div className="flex items-center gap-1.5 text-sm">
+            <Phone className="w-3 h-3 text-muted-foreground shrink-0" />
+            {user.phoneNumber
+              ? <span className="font-mono text-xs">{user.phoneNumber}</span>
+              : <span className="text-xs text-muted-foreground/50 italic">not linked</span>}
+          </div>
+        </td>
+
+        {/* WhatsApp status */}
+        <td className="py-3 px-3">
+          <WaStatusBadge status={user.status} />
+        </td>
+
+        {/* Account status */}
+        <td className="py-3 px-3 hidden sm:table-cell">
+          {user.isActive ? (
+            <span className="flex items-center gap-1 text-xs text-primary">
+              <CheckCircle className="w-3.5 h-3.5" /> Active
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-destructive">
+              <Ban className="w-3.5 h-3.5" /> Suspended
+            </span>
+          )}
+        </td>
+
+        {/* Join date */}
+        <td className="py-3 px-3 hidden lg:table-cell text-xs text-muted-foreground font-mono">
+          {joinDate}
+        </td>
+
+        {/* Actions */}
+        <td className="py-3 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1.5">
+            {user.isActive ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
+                onClick={() => suspend.mutate()}
+                disabled={suspend.isPending}
+                data-testid={`button-suspend-user-${user.id}`}
+              >
+                {suspend.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3" />}
+                <span className="ml-1 hidden sm:inline">Suspend</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => activate.mutate()}
+                disabled={activate.isPending}
+                data-testid={`button-activate-user-${user.id}`}
+              >
+                {activate.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                <span className="ml-1 hidden sm:inline">Activate</span>
+              </Button>
+            )}
+
+            {confirmDelete ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => { deleteUser.mutate(); setConfirmDelete(false); }}
+                  disabled={deleteUser.isPending}
+                  data-testid={`button-confirm-delete-user-${user.id}`}
+                >
+                  {deleteUser.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                onClick={() => setConfirmDelete(true)}
+                data-testid={`button-delete-user-${user.id}`}
+              >
+                <Trash2 className="w-3 h-3" />
+                <span className="ml-1 hidden sm:inline">Delete</span>
+              </Button>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {/* Expanded settings row */}
+      {expanded && (
+        <tr className="bg-secondary/10 border-b border-border/30">
+          <td colSpan={7} className="px-4 py-4">
+            <div className="space-y-4">
+              {/* Bot config strip */}
+              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Settings className="w-3.5 h-3.5" />
+                  <strong className="text-foreground">Prefix:</strong>
+                  <code className="bg-secondary px-1.5 py-0.5 rounded font-mono text-primary">{user.prefix}</code>
+                </span>
+                <span className="flex items-center gap-1">
+                  <strong className="text-foreground">Mode:</strong>
+                  <Badge variant="outline" className="text-xs font-mono h-5 capitalize">
+                    {user.mode}
+                  </Badge>
+                </span>
+                <span className="flex items-center gap-1">
+                  <strong className="text-foreground">Clerk ID:</strong>
+                  <code className="bg-secondary px-1.5 py-0.5 rounded font-mono opacity-60">{user.userId.slice(0, 24)}…</code>
+                </span>
+                <span className="flex items-center gap-1">
+                  <strong className="text-foreground">Updated:</strong>
+                  {new Date(user.updatedAt).toLocaleString()}
+                </span>
+              </div>
+
+              {/* Feature toggles */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">Bot Settings</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {settings.map((s) => <SettingPill key={s.label} label={s.label} on={s.on} />)}
+                </div>
+              </div>
+
+              {/* Bad words list (if any) */}
+              {user.antiBadWord && user.badWords && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wider">Blocked Words</p>
+                  <div className="flex flex-wrap gap-1">
+                    {user.badWords.split(",").filter(Boolean).map((w) => (
+                      <span key={w} className="text-xs px-2 py-0.5 bg-destructive/10 text-destructive border border-destructive/20 rounded-full font-mono">
+                        {w.trim()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Auto-reply message (if any) */}
+              {user.autoReply && user.autoReplyMessage && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1 font-medium uppercase tracking-wider">Auto-Reply Message</p>
+                  <p className="text-xs bg-secondary/50 border border-border/50 rounded p-2 italic">
+                    "{user.autoReplyMessage}"
+                  </p>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
 function AdminDashboardContent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [search, setSearch] = useState("");
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["admin", "stats"],
     queryFn: () => adminFetch<AdminStats>("/api/admin/stats"),
+    refetchInterval: 30_000,
   });
 
-  const { data: bots, isLoading: botsLoading } = useQuery<AdminBot[]>({
-    queryKey: ["admin", "bots"],
-    queryFn: () => adminFetch<AdminBot[]>("/api/admin/bots"),
-  });
-
-  const activateBot = useMutation({
-    mutationFn: (id: number) => adminFetch<AdminBot>(`/api/admin/bots/${id}/activate`, { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "bots"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
-      toast({ title: "Bot activated" });
-    },
-    onError: () => toast({ title: "Error activating bot", variant: "destructive" }),
-  });
-
-  const deactivateBot = useMutation({
-    mutationFn: (id: number) => adminFetch<AdminBot>(`/api/admin/bots/${id}/deactivate`, { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "bots"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
-      toast({ title: "Bot suspended" });
-    },
-    onError: () => toast({ title: "Error suspending bot", variant: "destructive" }),
+  const { data: users, isLoading: usersLoading } = useQuery<AdminUser[]>({
+    queryKey: ["admin", "users"],
+    queryFn: () => adminFetch<AdminUser[]>("/api/admin/users"),
+    refetchInterval: 30_000,
   });
 
   const handleLogout = () => {
@@ -117,15 +371,28 @@ function AdminDashboardContent() {
     window.location.reload();
   };
 
+  const filtered = (users ?? []).filter((u) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      u.email?.toLowerCase().includes(q) ||
+      u.phoneNumber?.includes(q) ||
+      u.userId.toLowerCase().includes(q) ||
+      u.firstName?.toLowerCase().includes(q) ||
+      u.lastName?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Shield className="w-6 h-6 text-primary" />
             <h1 className="text-3xl font-bold tracking-tight glow-text">Admin Control</h1>
           </div>
-          <p className="text-muted-foreground">Platform management and oversight.</p>
+          <p className="text-muted-foreground text-sm">Full platform oversight — users, sessions, and settings.</p>
         </div>
         <Button
           variant="outline"
@@ -143,9 +410,9 @@ function AdminDashboardContent() {
         {[
           { label: "Total Users", value: stats?.totalUsers, icon: Users, color: "text-blue-400" },
           { label: "Total Bots", value: stats?.totalBots, icon: Bot, color: "text-muted-foreground" },
-          { label: "Active Bots", value: stats?.activeBots, icon: Activity, color: "text-blue-500" },
-          { label: "Online Bots", value: stats?.onlineBots, icon: Zap, color: "text-primary", pulse: true },
-          { label: "Commands", value: stats?.totalCommands, icon: Command, color: "text-purple-500" },
+          { label: "Active", value: stats?.activeBots, icon: Activity, color: "text-primary" },
+          { label: "Online", value: stats?.onlineBots, icon: Wifi, color: "text-green-400", pulse: true },
+          { label: "Suspended", value: stats?.suspendedBots, icon: AlertTriangle, color: "text-yellow-400" },
         ].map(({ label, value, icon: Icon, color, pulse }) => (
           <Card key={label} className="bg-card border-border/50 relative overflow-hidden group hover:border-primary/30 transition-colors">
             <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 group-hover:bg-primary/50 transition-colors" />
@@ -154,101 +421,64 @@ function AdminDashboardContent() {
               <Icon className={`h-4 w-4 ${color} ${pulse ? "animate-pulse" : ""}`} />
             </CardHeader>
             <CardContent className="pl-4">
-              {statsLoading ? (
-                <Skeleton className="h-8 w-12 bg-muted/50" />
-              ) : (
-                <div className="text-2xl font-bold font-mono">{value ?? 0}</div>
-              )}
+              {statsLoading
+                ? <Skeleton className="h-8 w-12 bg-muted/50" />
+                : <div className="text-2xl font-bold font-mono">{value ?? 0}</div>}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* All Bots Table */}
+      {/* Users table */}
       <Card className="bg-card/50 border-border/50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-primary" />
-            All Bot Instances
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {botsLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 bg-muted/30" />)}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              All Users
+            </CardTitle>
+            <div className="relative">
+              <Input
+                placeholder="Search by email, phone, name…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full sm:w-64 h-8 text-xs bg-secondary/50 border-border/50 focus:border-primary/50"
+                data-testid="input-admin-search"
+              />
             </div>
-          ) : !bots || bots.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Bot className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No bots on the platform yet.</p>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {usersLoading ? (
+            <div className="space-y-2 p-4">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 bg-muted/30" />)}
+            </div>
+          ) : !filtered.length ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">{search ? "No users match your search." : "No users registered yet."}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border/50 text-muted-foreground text-xs">
-                    <th className="text-left py-2 px-3 font-mono">ID</th>
-                    <th className="text-left py-2 px-3">Bot Name</th>
-                    <th className="text-left py-2 px-3 hidden md:table-cell">User</th>
-                    <th className="text-left py-2 px-3">Status</th>
-                    <th className="text-left py-2 px-3">Active</th>
+                  <tr className="border-b border-border/50 text-muted-foreground text-xs bg-secondary/20">
+                    <th className="w-6 py-2 px-3" />
+                    <th className="text-left py-2 px-3">User / Email</th>
+                    <th className="text-left py-2 px-3 hidden md:table-cell">Phone</th>
+                    <th className="text-left py-2 px-3">WhatsApp</th>
+                    <th className="text-left py-2 px-3 hidden sm:table-cell">Account</th>
+                    <th className="text-left py-2 px-3 hidden lg:table-cell">Joined</th>
                     <th className="text-right py-2 px-3">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/30">
-                  {bots.map((bot) => (
-                    <tr
-                      key={bot.id}
-                      data-testid={`row-admin-bot-${bot.id}`}
-                      className="hover:bg-secondary/20 transition-colors"
-                    >
-                      <td className="py-3 px-3 font-mono text-xs text-muted-foreground">#{bot.id}</td>
-                      <td className="py-3 px-3 font-medium">{bot.name}</td>
-                      <td className="py-3 px-3 hidden md:table-cell">
-                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px] block">
-                          {bot.userId.substring(0, 20)}...
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <StatusBadge status={bot.status} />
-                      </td>
-                      <td className="py-3 px-3">
-                        {bot.isActive ? (
-                          <span className="flex items-center gap-1 text-primary text-xs">
-                            <CheckCircle className="w-3.5 h-3.5" /> Active
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-muted-foreground text-xs">
-                            <XCircle className="w-3.5 h-3.5 text-destructive" /> Suspended
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        {bot.isActive ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
-                            onClick={() => deactivateBot.mutate(bot.id)}
-                            disabled={deactivateBot.isPending}
-                            data-testid={`button-deactivate-bot-${bot.id}`}
-                          >
-                            Suspend
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10"
-                            onClick={() => activateBot.mutate(bot.id)}
-                            disabled={activateBot.isPending}
-                            data-testid={`button-activate-bot-${bot.id}`}
-                          >
-                            Activate
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
+                <tbody>
+                  {filtered.map((user) => (
+                    <UserRow
+                      key={user.id}
+                      user={user}
+                      onAction={() => queryClient.invalidateQueries({ queryKey: ["admin"] })}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -256,6 +486,10 @@ function AdminDashboardContent() {
           )}
         </CardContent>
       </Card>
+
+      <p className="text-center text-xs text-muted-foreground/40 font-mono pb-4">
+        NUTTER-XMD Admin Panel — {filtered.length} user{filtered.length !== 1 ? "s" : ""}
+      </p>
     </div>
   );
 }
