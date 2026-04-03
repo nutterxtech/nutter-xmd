@@ -9,6 +9,12 @@ import "./index.css";
 const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
 if (apiUrl) {
   setBaseUrl(apiUrl);
+} else if (import.meta.env.PROD) {
+  console.error(
+    "[NUTTER-XMD] VITE_API_URL is not set. " +
+    "API calls will hit the current origin instead of the Heroku backend. " +
+    "Set VITE_API_URL=https://<your-heroku-app>.herokuapp.com in Vercel environment variables and redeploy."
+  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

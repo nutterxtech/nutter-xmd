@@ -62,7 +62,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: bot, isLoading } = useGetMyBot();
+  const { data: bot, isLoading, isError: botError } = useGetMyBot();
   const { data: qrData, isLoading: qrLoading, refetch: refetchQR } = useGetBotQR({
     query: { enabled: false, queryKey: getGetBotQRQueryKey() },
   });
@@ -202,6 +202,29 @@ export default function Dashboard() {
       <div className="space-y-6">
         <Skeleton className="h-48 w-full rounded-xl bg-muted/30" />
         <Skeleton className="h-96 w-full rounded-xl bg-muted/30" />
+      </div>
+    );
+  }
+
+  if (botError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-destructive/50 bg-destructive/10">
+          <WifiOff className="w-7 h-7 text-destructive" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-destructive mb-1">Cannot reach server</h2>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            The backend is unavailable right now. This usually means the server is restarting — wait 30 seconds and try again.
+          </p>
+        </div>
+        <button
+          onClick={() => queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() })}
+          className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Retry
+        </button>
       </div>
     );
   }
