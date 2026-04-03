@@ -1,14 +1,20 @@
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  Browsers,
-  BufferJSON,
-  initAuthCreds,
-  type WASocket,
-  type SignalDataTypeMap,
-  type AuthenticationCreds,
+// Types only — erased at compile time, no runtime cost
+import type {
+  WASocket,
+  SignalDataTypeMap,
+  AuthenticationCreds,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
+
+// ─── Lazy Baileys loader ──────────────────────────────────────────────────────
+// Baileys + protobufjs loads ~250 MB of protocol schemas at import time.
+// We defer the import until the first bot actually connects so the server
+// starts lean and only pays the cost when needed.
+let _baileys: typeof import("@whiskeysockets/baileys") | null = null;
+async function getBaileys() {
+  if (!_baileys) _baileys = await import("@whiskeysockets/baileys");
+  return _baileys;
+}
 import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
 import { db, botsTable, whatsappAuthTable } from "@workspace/db";
@@ -144,6 +150,8 @@ async function sendStartupMessage(sock: WASocket, userId: string, selfJid: strin
 // ─── Database-backed auth state ───────────────────────────────────────────────
 
 async function useDatabaseAuthState(userId: string) {
+  const { BufferJSON, initAuthCreds } = await getBaileys();
+
   const rows = await db
     .select()
     .from(whatsappAuthTable)
@@ -214,6 +222,13 @@ async function startSocket(
   entry: SessionEntry,
   onStatusChange?: (s: "offline" | "connecting" | "online") => void
 ): Promise<WASocket> {
+  const {
+    default: makeWASocket,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    Browsers,
+  } = await getBaileys();
+
   const { state, saveCreds } = await useDatabaseAuthState(userId);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -224,7 +239,9 @@ async function startSocket(
     browser: Browsers.macOS("Chrome"),
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
-    // Keep the connection alive — prevents Render idle drops
+    // Prevent in-memory group metadata cache from growing unbounded
+    cachedGroupMetadata: async () => undefined,
+    // Keep the connection alive — prevents idle drops
     keepAliveIntervalMs: 25_000,
     logger: {
       level: "silent",
