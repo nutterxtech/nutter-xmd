@@ -234,7 +234,7 @@ async function startSocket(
     version,
     auth: state,
     printQRInTerminal: false,
-    browser: Browsers.macOS("Chrome"),
+    browser: ["NUTTER-XMD", "Chrome", "3.0.0"],
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
     // Prevent in-memory group metadata cache from growing unbounded
@@ -611,18 +611,45 @@ export async function requestQRCode(userId: string) {
 }
 
 export async function requestPairingCode(userId: string, phoneNumber: string) {
-  const entry = getOrCreateEntry(userId);
   const cleanPhone = phoneNumber.replace(/[^0-9]/g, "");
   if (!cleanPhone || cleanPhone.length < 7) throw new Error("Invalid phone number");
 
-  let sock = entry.socket;
-  if (!sock || entry.status === "offline") {
-    sock = await startSocket(userId, entry);
-    await new Promise((r) => setTimeout(r, 2000));
-  }
+  // Reject if already fully connected
+  const existing = activeSessions.get(userId);
+  if (existing?.status === "online") throw new Error("Already connected");
 
-  if (entry.status === "online") throw new Error("Already connected");
-  return sock!.requestPairingCode(cleanPhone);
+  // Tear down any existing socket — pairing code requires a fresh unauthenticated session
+  if (existing?.socket) {
+    clearKeepalive(existing);
+    try { existing.socket.end(undefined); } catch {}
+    existing.socket = null;
+    existing.status = "offline";
+  }
+  activeSessions.delete(userId);
+
+  // Wipe stored credentials so Baileys treats this as a brand-new device
+  await clearDatabaseAuthState(userId);
+
+  // Start a fresh socket (sets up all event handlers for when the user approves)
+  const entry = getOrCreateEntry(userId);
+  const sock = await startSocket(userId, entry);
+
+  // Give the WebSocket handshake a moment then request the pairing code.
+  // 800 ms is enough for the TLS/noise handshake without triggering QR mode.
+  await new Promise((r) => setTimeout(r, 800));
+
+  try {
+    const raw = await sock.requestPairingCode(cleanPhone);
+    // Format as XXXX-XXXX for clarity (Baileys returns 8 chars without dash)
+    const code = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
+    return code;
+  } catch (err: any) {
+    // Clean up on failure
+    entry.socket = null;
+    entry.status = "offline";
+    activeSessions.delete(userId);
+    throw new Error(err.message || "Failed to generate pairing code");
+  }
 }
 
 export async function disconnectSession(userId: string) {
