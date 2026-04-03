@@ -29,11 +29,12 @@ app.use(
   }),
 );
 
-// ── Static frontend (production only) ────────────────────────────────────────
-// Serve BEFORE auth middleware so the React SPA loads even if Clerk keys are
-// misconfigured.  Express.static handles cache headers, 304s, etc.
+// ── Static frontend (production only, when frontend is NOT on a separate host) ──
+// Skip static serving when CORS_ORIGIN is set — that means the frontend is
+// deployed separately (e.g. Vercel) and there is nothing to serve here.
+const separateFrontend = !!process.env.CORS_ORIGIN;
 const staticDir =
-  process.env.NODE_ENV === "production"
+  !separateFrontend && process.env.NODE_ENV === "production"
     ? path.join(process.cwd(), "artifacts/nutter-xmd/dist/public")
     : null;
 
@@ -41,9 +42,32 @@ if (staticDir) {
   app.use(express.static(staticDir));
 }
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// When CORS_ORIGIN is set, only allow those origins (comma-separated list).
+// In dev / same-host deployments, reflect all origins so Replit preview works.
+const corsOrigins = (process.env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    credentials: true,
+    origin:
+      corsOrigins.length > 0
+        ? (origin, callback) => {
+            if (!origin || corsOrigins.includes(origin)) {
+              callback(null, true);
+            } else {
+              callback(new Error(`CORS: origin "${origin}" not allowed`));
+            }
+          }
+        : true,
+  }),
+);
+
 // ── Common middleware ─────────────────────────────────────────────────────────
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -57,8 +81,8 @@ app.get("/health", (_req, res) => {
 // CLERK_PUBLISHABLE_KEY wasn't set, including requests for the static frontend.
 app.use("/api", clerkMiddleware(), router);
 
-// ── SPA fallback (production only) ───────────────────────────────────────────
-// Any non-API, non-clerk path returns index.html so client-side routing works.
+// ── SPA fallback (production only, same-host deployment) ─────────────────────
+// Only active when the frontend is bundled with this server (no CORS_ORIGIN).
 if (staticDir) {
   app.use((req, res, next) => {
     if (req.path.startsWith("/api") || req.path.startsWith("/__clerk")) {

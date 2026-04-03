@@ -1,0 +1,52 @@
+{
+  "name": "nutter-xmd-api",
+  "description": "NUTTER-XMD WhatsApp Bot API Server",
+  "buildpacks": [{ "url": "heroku/nodejs" }],
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "SUPABASE_DATABASE_URL": {
+      "required": true,
+      "description": "PostgreSQL connection string (Supabase)"
+    },
+    "CLERK_SECRET_KEY": {
+      "required": true,
+      "description": "Clerk secret key for server-side auth"
+    },
+    "CLERK_PUBLISHABLE_KEY": {
+      "required": true,
+      "description": "Clerk publishable key"
+    },
+    "SESSION_SECRET": {
+      "required": true,
+      "description": "Secret for session signing"
+    },
+    "ADMIN_USERNAME": {
+      "required": false,
+      "description": "Admin dashboard login username"
+    },
+    "ADMIN_KEY": {
+      "required": false,
+      "description": "Admin dashboard login key/password"
+    },
+    "CORS_ORIGIN": {
+      "required": false,
+      "description": "Comma-separated list of allowed CORS origins, e.g. https://your-app.vercel.app"
+    },
+    "AI_INTEGRATIONS_OPENAI_BASE_URL": {
+      "required": false,
+      "description": "OpenAI-compatible API base URL"
+    },
+    "AI_INTEGRATIONS_OPENAI_API_KEY": {
+      "required": false,
+      "description": "OpenAI API key"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
