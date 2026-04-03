@@ -128,24 +128,6 @@ function ClerkProviderWithRoutes() {
           colorInputPlaceholder: "#555555",
           borderRadius: "0.5rem",
         },
-        elements: {
-          card: "bg-[#111111] border border-[#00ff66]/25 shadow-[0_0_40px_rgba(0,255,102,0.08)] rounded-xl",
-          headerTitle: "text-white font-bold tracking-wide",
-          headerSubtitle: "text-[#aaaaaa]",
-          socialButtonsBlockButton: "border border-[#2a2a2a] bg-[#1a1a1a] hover:bg-[#222222] hover:border-[#00ff66]/40 text-white transition-colors",
-          socialButtonsBlockButtonText: "text-white font-medium",
-          formButtonPrimary: "bg-[#00ff66] hover:bg-[#00cc55] text-black font-bold shadow-[0_0_15px_rgba(0,255,102,0.3)] transition-all",
-          footerActionLink: "text-[#00ff66] hover:text-[#33ff88] font-medium",
-          dividerLine: "bg-[#2a2a2a]",
-          dividerText: "text-[#555555]",
-          formFieldInput: "border border-[#2a2a2a] bg-[#1a1a1a] text-white focus:border-[#00ff66]/60 focus:shadow-[0_0_10px_rgba(0,255,102,0.1)] transition-all",
-          formFieldLabel: "text-[#cccccc] font-medium",
-          identityPreviewText: "text-white",
-          identityPreviewEditButton: "text-[#00ff66] hover:text-[#33ff88]",
-          otpCodeFieldInput: "border-[#2a2a2a] bg-[#1a1a1a] text-white",
-          alertText: "text-[#ff4444]",
-          logoImage: "opacity-90",
-        },
       }}
     >
       <QueryClientProvider client={queryClient}>

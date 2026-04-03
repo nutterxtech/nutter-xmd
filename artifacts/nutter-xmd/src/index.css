@@ -235,3 +235,103 @@
   background: hsl(var(--background));
   animation: glitch 2s infinite linear alternate-reverse;
 }
+
+/* ── Clerk auth card — dark cyberpunk overrides ─────────────────────────────
+   Clerk renders its own HTML with specific class names. We override them here
+   so the card is always visible on our dark background.
+   ───────────────────────────────────────────────────────────────────────── */
+.cl-card,
+.cl-card__sign-in,
+.cl-card__sign-up {
+  background-color: #111111 !important;
+  border: 1px solid rgba(0, 255, 102, 0.2) !important;
+  box-shadow: 0 0 40px rgba(0, 255, 102, 0.06), 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+  border-radius: 12px !important;
+}
+
+.cl-headerTitle {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.cl-headerSubtitle,
+.cl-headerTitle + * {
+  color: #aaaaaa !important;
+}
+
+.cl-formFieldLabel {
+  color: #cccccc !important;
+  font-weight: 500 !important;
+}
+
+.cl-formFieldInput,
+.cl-formFieldInput:focus {
+  background-color: #1a1a1a !important;
+  border-color: #2a2a2a !important;
+  color: #ffffff !important;
+}
+
+.cl-formFieldInput:focus {
+  border-color: rgba(0, 255, 102, 0.5) !important;
+  box-shadow: 0 0 8px rgba(0, 255, 102, 0.15) !important;
+}
+
+.cl-formButtonPrimary,
+.cl-formButtonPrimary:hover {
+  background-color: #00ff66 !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+.cl-formButtonPrimary:hover {
+  background-color: #00cc55 !important;
+}
+
+.cl-footerActionLink {
+  color: #00ff66 !important;
+}
+
+.cl-footerActionLink:hover {
+  color: #33ff88 !important;
+}
+
+.cl-footerActionText,
+.cl-dividerText,
+.cl-identityPreviewText,
+.cl-userPreviewTextContainer * {
+  color: #aaaaaa !important;
+}
+
+.cl-dividerLine {
+  background-color: #2a2a2a !important;
+}
+
+.cl-socialButtonsBlockButton {
+  background-color: #1a1a1a !important;
+  border-color: #2a2a2a !important;
+  color: #ffffff !important;
+}
+
+.cl-socialButtonsBlockButton:hover {
+  background-color: #222222 !important;
+  border-color: rgba(0, 255, 102, 0.3) !important;
+}
+
+.cl-socialButtonsBlockButtonText {
+  color: #ffffff !important;
+}
+
+.cl-internal-b3fm6y,
+.cl-alternativeMethodsBlockButton {
+  color: #ffffff !important;
+}
+
+.cl-otpCodeFieldInput {
+  background-color: #1a1a1a !important;
+  border-color: #2a2a2a !important;
+  color: #ffffff !important;
+}
+
+.cl-formResendCodeLink {
+  color: #00ff66 !important;
+}

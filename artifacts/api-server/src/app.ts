@@ -48,11 +48,12 @@ app.use("/api", router);
 if (process.env.NODE_ENV === "production") {
   const staticDir = path.join(process.cwd(), "artifacts/nutter-xmd/dist/public");
   app.use(express.static(staticDir));
-  // SPA fallback: any route that isn't /api/* gets index.html
-  app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api/") && !req.path.startsWith("/__clerk")) {
-      res.sendFile(path.join(staticDir, "index.html"));
+  // SPA fallback: serve index.html for all non-API routes (Express v5 requires app.use for wildcards)
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/") || req.path.startsWith("/__clerk")) {
+      return next();
     }
+    res.sendFile(path.join(staticDir, "index.html"));
   });
 }
 
