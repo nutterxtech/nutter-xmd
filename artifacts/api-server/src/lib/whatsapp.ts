@@ -673,9 +673,35 @@ export async function requestPairingCode(userId: string, phoneNumber: string) {
   const entry = getOrCreateEntry(userId);
   const sock = await startSocket(userId, entry);
 
-  // Give the WebSocket handshake a moment then request the pairing code.
-  // 800 ms is enough for the TLS/noise handshake without triggering QR mode.
-  await new Promise((r) => setTimeout(r, 800));
+  // Wait until the socket has completed the noise-protocol handshake and is
+  // ready for pairing. Baileys signals this by emitting a QR code — instead
+  // of scanning that QR we intercept the event and request a pairing code.
+  // Using a fixed timeout was unreliable on Heroku (longer network path to WA
+  // servers). Waiting for the qr event is deterministic.
+  await new Promise<void>((resolve, reject) => {
+    const MAX_WAIT_MS = 20_000; // 20 s hard cap
+
+    const timer = setTimeout(() => {
+      sock.ev.off("connection.update", handler);
+      reject(new Error("Timed out waiting for WhatsApp handshake"));
+    }, MAX_WAIT_MS);
+
+    function handler(update: any) {
+      if (update.qr) {
+        // Socket is ready — stop waiting
+        clearTimeout(timer);
+        sock.ev.off("connection.update", handler);
+        resolve();
+      } else if (update.connection === "close") {
+        // Connection failed before becoming ready
+        clearTimeout(timer);
+        sock.ev.off("connection.update", handler);
+        reject(new Error("Socket closed before handshake completed"));
+      }
+    }
+
+    sock.ev.on("connection.update", handler);
+  });
 
   try {
     const raw = await sock.requestPairingCode(cleanPhone);
