@@ -2,7 +2,7 @@
   "version": 2,
   "framework": null,
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "npx tsc --build --force && BASE_PATH=/ pnpm --filter @workspace/nutter-xmd run build && rm -rf dist && cp -r artifacts/nutter-xmd/dist dist",
-  "outputDirectory": "dist",
+  "buildCommand": "npx tsc --build --force && BASE_PATH=/ pnpm --filter @workspace/nutter-xmd run build",
+  "outputDirectory": "artifacts/nutter-xmd/dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
