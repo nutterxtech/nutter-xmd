@@ -15,4 +15,4 @@ export interface CommandContext {
   botJid: string;
 }
 
-export type CommandHandler = (ctx: CommandContext) => Promise<void>;
+export type CommandHandler = (ctx: CommandContext) => Promise<unknown>;

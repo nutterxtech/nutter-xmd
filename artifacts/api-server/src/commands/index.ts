@@ -17,7 +17,7 @@ async function updateBotPrefix(userId: string, prefix: string) {
   await db.update(botsTable).set({ prefix }).where(eq(botsTable.userId, userId));
 }
 
-const COMMANDS: Record<string, (ctx: CommandContext) => Promise<void>> = {
+const COMMANDS: Record<string, (ctx: CommandContext) => Promise<unknown>> = {
   menu: menuCommand,
   help: menuCommand,
   // AI

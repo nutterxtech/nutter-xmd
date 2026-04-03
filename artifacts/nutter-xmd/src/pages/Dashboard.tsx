@@ -73,7 +73,7 @@ export default function Dashboard() {
 
   const { data: bot, isLoading } = useGetMyBot();
   const { data: qrData, isLoading: qrLoading, refetch: refetchQR } = useGetBotQR({
-    query: { enabled: false },
+    query: { enabled: false, queryKey: getGetBotQRQueryKey() },
   });
 
   const updateBot = useUpdateMyBot();

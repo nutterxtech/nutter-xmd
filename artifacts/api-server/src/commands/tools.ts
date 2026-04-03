@@ -189,6 +189,10 @@ export async function getppCommand(ctx: CommandContext) {
   const target = mentioned ?? quoted ?? ctx.senderJid;
   try {
     const url = await ctx.sock.profilePictureUrl(target, "image");
+    if (!url) {
+      await ctx.sock.sendMessage(ctx.jid, { text: "❌ No profile picture found or it's hidden." });
+      return;
+    }
     const res = await axios.get(url, { responseType: "arraybuffer", timeout: 10000 });
     const buffer = Buffer.from(res.data);
     await ctx.sock.sendMessage(ctx.jid, { image: buffer, caption: `👤 *Profile Picture*` });
