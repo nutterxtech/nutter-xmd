@@ -12,6 +12,7 @@ import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import { eq } from "drizzle-orm";
 import { db, botsTable, whatsappAuthTable } from "@workspace/db";
+import { handleCommand } from "../commands/index";
 
 interface SessionEntry {
   socket: WASocket | null;
@@ -34,12 +35,21 @@ function getOrCreateEntry(userId: string): SessionEntry {
   return activeSessions.get(userId)!;
 }
 
-async function getBotPrefix(userId: string): Promise<string> {
+async function getBotSettings(userId: string) {
   try {
     const [bot] = await db.select().from(botsTable).where(eq(botsTable.userId, userId)).limit(1);
-    return bot?.prefix ?? "!";
+    return {
+      prefix: bot?.prefix ?? "!",
+      mode: bot?.mode ?? "public",
+      autoRead: bot?.autoRead ?? false,
+      typingStatus: bot?.typingStatus ?? false,
+      alwaysOnline: bot?.alwaysOnline ?? false,
+      antiCall: bot?.antiCall ?? false,
+      autoReply: bot?.autoReply ?? false,
+      autoReplyMessage: bot?.autoReplyMessage ?? "",
+    };
   } catch {
-    return "!";
+    return { prefix: "!", mode: "public", autoRead: false, typingStatus: false, alwaysOnline: false, antiCall: false, autoReply: false, autoReplyMessage: "" };
   }
 }
 
@@ -50,7 +60,7 @@ function jidFromPhone(phoneOrJid: string): string {
 
 async function sendStartupMessage(sock: WASocket, userId: string, selfJid: string) {
   try {
-    const prefix = await getBotPrefix(userId);
+    const { prefix } = await getBotSettings(userId);
     const msg =
       `*NUTTER-XMD* is now *online* 🟢\n\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
@@ -58,46 +68,11 @@ async function sendStartupMessage(sock: WASocket, userId: string, selfJid: strin
       `🔋 *Status:* Active & Ready\n` +
       `━━━━━━━━━━━━━━━━━━━\n\n` +
       `> *Quick commands:*\n` +
-      `▸ \`${prefix}ping\` — Check bot speed\n` +
-      `▸ \`${prefix}test\` — Run a system test\n\n` +
+      `▸ \`${prefix}menu\` — Full command menu\n` +
+      `▸ \`${prefix}ping\` — Check bot speed\n\n` +
       `_Powered by NUTTER-XMD_ ⚡`;
     await sock.sendMessage(selfJid, { text: msg });
   } catch {}
-}
-
-async function handleCommand(
-  sock: WASocket,
-  userId: string,
-  jid: string,
-  text: string,
-  prefix: string,
-  sentAt: number
-) {
-  const lower = text.trim().toLowerCase();
-
-  if (lower === `${prefix}ping`) {
-    const latency = Date.now() - sentAt;
-    await sock.sendMessage(jid, {
-      text: `🏓 *Pong!*\n\nBot speed: *${latency}ms*\nStatus: Online ✅`,
-    });
-    return;
-  }
-
-  if (lower === `${prefix}test`) {
-    const prefix_ = await getBotPrefix(userId);
-    await sock.sendMessage(jid, {
-      text:
-        `✅ *NUTTER-XMD System Test*\n\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `🔌 *Connection:* Stable\n` +
-        `📡 *Server:* Online\n` +
-        `🔑 *Prefix:* \`${prefix_}\`\n` +
-        `⏱ *Uptime:* Active\n` +
-        `━━━━━━━━━━━━━━━━━━━\n\n` +
-        `_All systems operational_ ⚡`,
-    });
-    return;
-  }
 }
 
 // ─── Database-backed auth state ──────────────────────────────────────────────
@@ -278,6 +253,18 @@ async function startSocket(
     }
   });
 
+  sock.ev.on("call", async (calls) => {
+    for (const call of calls) {
+      const { antiCall } = await getBotSettings(userId);
+      if (antiCall && call.status === "offer") {
+        try {
+          await sock.rejectCall(call.id, call.from);
+          await sock.sendMessage(call.from, { text: "❌ *Auto-rejected:* Calls are disabled for this bot." });
+        } catch {}
+      }
+    }
+  });
+
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
@@ -285,19 +272,46 @@ async function startSocket(
       if (!msg.message) continue;
       if (!msg.key.remoteJid || msg.key.remoteJid === "status@broadcast") continue;
 
+      const jid = msg.key.remoteJid;
+      const sentAt = (msg.messageTimestamp as number) * 1000 || Date.now();
+      const settings = await getBotSettings(userId);
+
+      // Auto-read
+      if (settings.autoRead) {
+        try { await sock.readMessages([msg.key]); } catch {}
+      }
+
+      // Always online presence
+      if (settings.alwaysOnline) {
+        try { await sock.sendPresenceUpdate("available", jid); } catch {}
+      }
+
       const body =
         msg.message.conversation ||
         msg.message.extendedTextMessage?.text ||
+        msg.message.imageMessage?.caption ||
+        msg.message.videoMessage?.caption ||
         "";
 
       if (!body.trim()) continue;
 
-      const prefix = await getBotPrefix(userId);
-      if (!body.startsWith(prefix)) continue;
+      // Typing indicator when processing commands
+      if (settings.typingStatus && body.startsWith(settings.prefix)) {
+        try { await sock.sendPresenceUpdate("composing", jid); } catch {}
+        setTimeout(async () => { try { await sock.sendPresenceUpdate("paused", jid); } catch {} }, 2000);
+      }
 
-      const jid = msg.key.remoteJid;
-      const sentAt = (msg.messageTimestamp as number) * 1000 || Date.now();
-      await handleCommand(sock, userId, jid, body, prefix, sentAt);
+      // Command handling
+      if (body.startsWith(settings.prefix)) {
+        await handleCommand(sock, userId, jid, body, settings.prefix, sentAt, msg, settings.mode);
+        continue;
+      }
+
+      // Auto-reply chatbot (only in DMs, not groups, when enabled)
+      if (settings.autoReply && !msg.key.fromMe && !jid.endsWith("@g.us")) {
+        const replyMsg = settings.autoReplyMessage || "I'm currently unavailable. Please try later.";
+        try { await sock.sendMessage(jid, { text: replyMsg }); } catch {}
+      }
     }
   });
 
