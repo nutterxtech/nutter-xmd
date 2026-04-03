@@ -14,15 +14,20 @@ import { eq } from "drizzle-orm";
 import { db, botsTable, whatsappAuthTable } from "@workspace/db";
 import { handleCommand } from "../commands/index";
 
-// Messages older than this timestamp (set at module load) are ignored when the
-// bot reconnects to avoid executing a backlog of stale commands.
-const BOT_STARTED_AT = Date.now();
+// ─── Session entry ────────────────────────────────────────────────────────────
 
 interface SessionEntry {
   socket: WASocket | null;
   qrCode: string | null;
   status: "offline" | "connecting" | "online";
-  pairingCodeResolver: ((code: string) => void) | null;
+  /** Timestamp (ms) when the current connection opened — used as stale-message cutoff */
+  connectedAt: number;
+  /** True once the first startup message has been sent for this session */
+  startupSent: boolean;
+  /** Consecutive reconnect attempts — used for exponential backoff */
+  reconnectCount: number;
+  /** Keepalive interval handle */
+  keepaliveTimer: ReturnType<typeof setInterval> | null;
 }
 
 const activeSessions = new Map<string, SessionEntry>();
@@ -33,11 +38,23 @@ function getOrCreateEntry(userId: string): SessionEntry {
       socket: null,
       qrCode: null,
       status: "offline",
-      pairingCodeResolver: null,
+      connectedAt: 0,
+      startupSent: false,
+      reconnectCount: 0,
+      keepaliveTimer: null,
     });
   }
   return activeSessions.get(userId)!;
 }
+
+function clearKeepalive(entry: SessionEntry) {
+  if (entry.keepaliveTimer) {
+    clearInterval(entry.keepaliveTimer);
+    entry.keepaliveTimer = null;
+  }
+}
+
+// ─── Bot settings ─────────────────────────────────────────────────────────────
 
 async function getBotSettings(userId: string) {
   try {
@@ -61,7 +78,8 @@ async function getBotSettings(userId: string) {
       autoViewStatus: bot?.autoViewStatus ?? false,
       autoLikeStatus: bot?.autoLikeStatus ?? false,
     };
-  } catch {
+  } catch (err) {
+    console.error("[whatsapp] getBotSettings error:", err);
     return {
       prefix: "!", mode: "public", autoRead: false, typingStatus: false,
       alwaysOnline: false, antiCall: false, antiLink: false,
@@ -72,52 +90,55 @@ async function getBotSettings(userId: string) {
   }
 }
 
-function jidFromPhone(phoneOrJid: string): string {
-  const clean = phoneOrJid.split(":")[0].replace(/[^0-9]/g, "");
-  return `${clean}@s.whatsapp.net`;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const LINK_REGEX = /(?:https?:\/\/|www\.)[^\s]+|chat\.whatsapp\.com\/[^\s]+/i;
 
-function containsLink(text: string): boolean {
-  return LINK_REGEX.test(text);
-}
+function containsLink(text: string) { return LINK_REGEX.test(text); }
 
-function containsBadWord(text: string, words: string[]): boolean {
+function containsBadWord(text: string, words: string[]) {
   const lower = text.toLowerCase();
   return words.some((w) => w && lower.includes(w.toLowerCase()));
 }
 
-async function isBotAdmin(sock: WASocket, groupJid: string, botJid: string): Promise<boolean> {
+async function isBotAdmin(sock: WASocket, groupJid: string, botJid: string) {
   try {
     const { participants } = await sock.groupMetadata(groupJid);
     const botNum = botJid.split(":")[0].replace(/[^0-9]/g, "");
-    const me = participants.find((p) => p.id.split(":")[0].replace(/[^0-9]/g, "") === botNum);
+    const me = participants.find(
+      (p) => p.id.split(":")[0].replace(/[^0-9]/g, "") === botNum
+    );
     return me?.admin === "admin" || me?.admin === "superadmin";
   } catch {
     return false;
   }
 }
 
-// ── Startup message ───────────────────────────────────────────────────────────
+function jidFromPhone(phoneOrJid: string) {
+  const clean = phoneOrJid.split(":")[0].replace(/[^0-9]/g, "");
+  return `${clean}@s.whatsapp.net`;
+}
+
+// ─── Startup message (sent only once per session) ─────────────────────────────
 
 async function sendStartupMessage(sock: WASocket, userId: string, selfJid: string) {
   try {
     const { prefix } = await getBotSettings(userId);
-    const msg =
-      `*NUTTER-XMD* is now *online* 🟢\n\n` +
-      `━━━━━━━━━━━━━━━━━━━\n` +
-      `📌 *Prefix:* \`${prefix}\`\n` +
-      `🔋 *Status:* Active & Ready\n` +
-      `━━━━━━━━━━━━━━━━━━━\n\n` +
-      `> *Quick commands:*\n` +
-      `▸ \`${prefix}menu\` — Full command menu\n` +
-      `▸ \`${prefix}ping\` — Check bot speed\n\n` +
-      `_Powered by NUTTER-XMD_ ⚡`;
-    await sock.sendMessage(selfJid, { text: msg });
-  } catch {}
+    await sock.sendMessage(selfJid, {
+      text:
+        `*NUTTER-XMD* is now *online* 🟢\n\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `📌 *Prefix:* \`${prefix}\`\n` +
+        `🔋 *Status:* Active & Ready\n` +
+        `━━━━━━━━━━━━━━━━━━━\n\n` +
+        `▸ \`${prefix}menu\` — Full command list\n` +
+        `▸ \`${prefix}ping\` — Check response speed\n\n` +
+        `_Powered by NUTTER-XMD_ ⚡`,
+    });
+    console.log(`[whatsapp] Startup message sent for userId=${userId}`);
+  } catch (err) {
+    console.error("[whatsapp] Failed to send startup message:", err);
+  }
 }
 
 // ─── Database-backed auth state ───────────────────────────────────────────────
@@ -171,29 +192,19 @@ async function useDatabaseAuthState(userId: string) {
         for (const id in entries) {
           const val = entries[id];
           const k = `${type}/${id}`;
-          if (val != null) {
-            keysMap[k] = val;
-          } else {
-            delete keysMap[k];
-          }
+          if (val != null) keysMap[k] = val;
+          else delete keysMap[k];
         }
       }
       await persistToDb();
     },
   };
 
-  return {
-    state: { creds, keys },
-    saveCreds: async () => {
-      await persistToDb();
-    },
-  };
+  return { state: { creds, keys }, saveCreds: persistToDb };
 }
 
 export async function clearDatabaseAuthState(userId: string) {
-  await db
-    .delete(whatsappAuthTable)
-    .where(eq(whatsappAuthTable.userId, userId));
+  await db.delete(whatsappAuthTable).where(eq(whatsappAuthTable.userId, userId));
 }
 
 // ─── Socket lifecycle ─────────────────────────────────────────────────────────
@@ -201,7 +212,7 @@ export async function clearDatabaseAuthState(userId: string) {
 async function startSocket(
   userId: string,
   entry: SessionEntry,
-  onStatusChange?: (status: "offline" | "connecting" | "online") => void
+  onStatusChange?: (s: "offline" | "connecting" | "online") => void
 ): Promise<WASocket> {
   const { state, saveCreds } = await useDatabaseAuthState(userId);
   const { version } = await fetchLatestBaileysVersion();
@@ -213,24 +224,16 @@ async function startSocket(
     browser: Browsers.macOS("Chrome"),
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
+    // Keep the connection alive — prevents Render idle drops
+    keepAliveIntervalMs: 25_000,
     logger: {
       level: "silent",
-      trace: () => {},
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
+      trace: () => {}, debug: () => {}, info: () => {},
+      warn: () => {}, error: () => {}, fatal: () => {},
       child: () => ({
-        level: "silent",
-        trace: () => {},
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        child: () => ({} as any),
-        fatal: () => {},
+        level: "silent", trace: () => {}, debug: () => {}, info: () => {},
+        warn: () => {}, error: () => {}, fatal: () => {}, child: () => ({} as any),
       }),
-      fatal: () => {},
     } as any,
   });
 
@@ -238,15 +241,14 @@ async function startSocket(
 
   sock.ev.on("creds.update", saveCreds);
 
-  // ── Connection state ──────────────────────────────────────────────────────
+  // ── Connection updates ──────────────────────────────────────────────────────
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
       try {
         entry.qrCode = await QRCode.toDataURL(qr, {
-          width: 300,
-          margin: 2,
+          width: 300, margin: 2,
           color: { dark: "#000000", light: "#ffffff" },
         });
       } catch {
@@ -259,25 +261,54 @@ async function startSocket(
     if (connection === "close") {
       const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const loggedOut = reason === DisconnectReason.loggedOut;
+      // 440 = connectionReplaced — another instance of this session is online
+      const replaced = reason === DisconnectReason.connectionReplaced;
 
+      console.log(`[whatsapp] Connection closed for userId=${userId} reason=${reason} loggedOut=${loggedOut} replaced=${replaced}`);
+
+      clearKeepalive(entry);
       entry.status = "offline";
       entry.qrCode = null;
       entry.socket = null;
       onStatusChange?.("offline");
 
+      try {
+        await db.update(botsTable).set({ status: "offline" }).where(eq(botsTable.userId, userId));
+      } catch {}
+
       if (loggedOut) {
         await clearDatabaseAuthState(userId);
         activeSessions.delete(userId);
-      } else {
+        console.log(`[whatsapp] Session logged out for userId=${userId}, auth cleared`);
+      } else if (replaced) {
+        // Another server instance is already holding this session.
+        // Wait 3 minutes before trying again — immediately reconnecting
+        // would just knock the other instance off in an infinite loop.
+        console.warn(
+          `[whatsapp] Session replaced for userId=${userId}. ` +
+          `Another server instance is active. Waiting 3 min before retry.`
+        );
+        entry.reconnectCount = 0;
         const newEntry = getOrCreateEntry(userId);
-        setTimeout(() => startSocket(userId, newEntry, onStatusChange), 3000);
+        setTimeout(() => startSocket(userId, newEntry, onStatusChange), 3 * 60_000);
+      } else {
+        // Exponential backoff: 5s, 10s, 20s, 40s … max 120s
+        const delay = Math.min(5000 * Math.pow(2, entry.reconnectCount), 120_000);
+        entry.reconnectCount++;
+        console.log(`[whatsapp] Reconnecting userId=${userId} in ${delay}ms (attempt ${entry.reconnectCount})`);
+        const newEntry = getOrCreateEntry(userId);
+        setTimeout(() => startSocket(userId, newEntry, onStatusChange), delay);
       }
     }
 
     if (connection === "open") {
+      entry.reconnectCount = 0;
+      entry.connectedAt = Date.now();
       entry.status = "online";
       entry.qrCode = null;
       onStatusChange?.("online");
+
+      console.log(`[whatsapp] Connection open for userId=${userId}`);
 
       try {
         const selfId = sock.user?.id;
@@ -290,65 +321,49 @@ async function startSocket(
           .where(eq(botsTable.userId, userId));
       } catch {}
 
-      if (sock.user?.id) {
+      // Only send startup message on the first-ever connection, not reconnects
+      if (!entry.startupSent && sock.user?.id) {
+        entry.startupSent = true;
         const selfJid = jidFromPhone(sock.user.id);
-        setTimeout(() => sendStartupMessage(sock, userId, selfJid), 2000);
+        setTimeout(() => sendStartupMessage(sock, userId, selfJid), 3000);
       }
     }
   });
 
-  // ── Incoming calls ────────────────────────────────────────────────────────
+  // ── Calls ─────────────────────────────────────────────────────────────────
   sock.ev.on("call", async (calls) => {
     for (const call of calls) {
       const { antiCall } = await getBotSettings(userId);
       if (antiCall && call.status === "offer") {
         try {
           await sock.rejectCall(call.id, call.from);
-          await sock.sendMessage(call.from, {
-            text: "🚫 Calls are not allowed in this chat.",
-          });
+          await sock.sendMessage(call.from, { text: "🚫 Calls are not allowed in this chat." });
         } catch {}
       }
     }
   });
 
-  // ── Group participant events (welcome / goodbye) ───────────────────────────
+  // ── Group events (welcome / goodbye) ──────────────────────────────────────
   sock.ev.on("group-participants.update", async ({ id, participants, action }) => {
     const settings = await getBotSettings(userId);
     const botJid = sock.user?.id ?? "";
     const botNum = botJid.split(":")[0].replace(/[^0-9]/g, "");
 
     for (const participant of participants) {
-      // Never send welcome/goodbye for the bot itself
       if (participant.replace(/[^0-9]/g, "") === botNum) continue;
 
       if (action === "add" && settings.welcomeMessage) {
         let ppUrl: string | null = null;
-        try {
-          ppUrl = await sock.profilePictureUrl(participant, "image");
-        } catch {}
-
+        try { ppUrl = await sock.profilePictureUrl(participant, "image"); } catch {}
         const caption =
           `🎉 *Welcome to the group!*\n\n` +
           `Hey @${participant.split("@")[0]}! 👋\n\n` +
-          `We're so glad you're here. Please read the group rules,\n` +
-          `be respectful, and enjoy your stay! 🌟\n\n` +
-          `━━━━━━━━━━━━━━━━━━━\n` +
+          `Please read the group rules and enjoy your stay! 🌟\n\n` +
           `_Powered by NUTTER-XMD_ ⚡`;
-
         try {
-          if (ppUrl) {
-            await sock.sendMessage(id, {
-              image: { url: ppUrl },
-              caption,
-              mentions: [participant],
-            });
-          } else {
-            await sock.sendMessage(id, {
-              text: caption,
-              mentions: [participant],
-            });
-          }
+          await sock.sendMessage(id, ppUrl
+            ? { image: { url: ppUrl }, caption, mentions: [participant] }
+            : { text: caption, mentions: [participant] });
         } catch {}
       }
 
@@ -356,10 +371,7 @@ async function startSocket(
         try {
           await sock.sendMessage(id, {
             text:
-              `👋 *Goodbye!*\n\n` +
-              `@${participant.split("@")[0]} has left the group.\n\n` +
-              `Thanks for being part of us!\n` +
-              `_— NUTTER-XMD_ ✨`,
+              `👋 *Goodbye!*\n\n@${participant.split("@")[0]} has left the group.\nThanks for being part of us!\n_— NUTTER-XMD_ ✨`,
             mentions: [participant],
           });
         } catch {}
@@ -367,179 +379,171 @@ async function startSocket(
     }
   });
 
-  // ── Messages ──────────────────────────────────────────────────────────────
+  // ── Messages ───────────────────────────────────────────────────────────────
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      if (!msg.message) continue;
-      if (!msg.key.remoteJid) continue;
+      try {
+        if (!msg.message || !msg.key.remoteJid) continue;
 
-      const jid = msg.key.remoteJid;
-      const sentAt = (msg.messageTimestamp as number) * 1000 || Date.now();
+        const jid = msg.key.remoteJid;
+        const sentAt = Number(msg.messageTimestamp) * 1000 || Date.now();
 
-      // ── Status broadcast (auto-view / auto-like) ──────────────────────────
-      if (jid === "status@broadcast") {
-        if (sentAt >= BOT_STARTED_AT - 15_000) {
+        // ── Status broadcast ──────────────────────────────────────────────────
+        if (jid === "status@broadcast") {
           const settings = await getBotSettings(userId);
           if (settings.autoViewStatus) {
             try { await sock.readMessages([msg.key]); } catch {}
           }
           if (settings.autoLikeStatus && msg.key.participant) {
             try {
-              // React with ❤️ to the status — sent to the status poster's JID
               await sock.sendMessage(msg.key.participant, {
-                react: {
-                  text: "❤️",
-                  key: { ...msg.key, remoteJid: "status@broadcast" },
-                },
+                react: { text: "❤️", key: { ...msg.key, remoteJid: "status@broadcast" } },
               });
             } catch {}
           }
-        }
-        continue;
-      }
-
-      // ── Stale-message guard ───────────────────────────────────────────────
-      if (sentAt < BOT_STARTED_AT - 15_000) continue;
-
-      // ── Skip protocol noise ───────────────────────────────────────────────
-      const m = msg.message;
-      if (
-        m.protocolMessage ||
-        m.reactionMessage ||
-        m.pollUpdateMessage ||
-        m.keepInChatMessage
-      ) continue;
-
-      const settings = await getBotSettings(userId);
-      const isGroup = jid.endsWith("@g.us");
-      const botJid = sock.user?.id ?? "";
-      const senderJid = msg.key.fromMe
-        ? botJid
-        : (msg.key.participant ?? msg.key.remoteJid ?? "");
-
-      // Auto-read
-      if (settings.autoRead) {
-        try { await sock.readMessages([msg.key]); } catch {}
-      }
-
-      // Always online presence
-      if (settings.alwaysOnline) {
-        try { await sock.sendPresenceUpdate("available", jid); } catch {}
-      }
-
-      // ── Antisticker (must run before body extraction since stickers have no text) ──
-      if (isGroup && !msg.key.fromMe && settings.antiSticker && m.stickerMessage) {
-        const botIsAdmin = await isBotAdmin(sock, jid, botJid);
-        if (botIsAdmin) {
-          try { await sock.sendMessage(jid, { delete: msg.key }); } catch {}
           continue;
         }
-      }
 
-      // ── Body extraction — handles all WhatsApp message wrappers ──────────
-      const body =
-        m.conversation ||
-        m.extendedTextMessage?.text ||
-        m.imageMessage?.caption ||
-        m.videoMessage?.caption ||
-        m.documentMessage?.caption ||
-        m.documentWithCaptionMessage?.message?.documentMessage?.caption ||
-        m.viewOnceMessage?.message?.imageMessage?.caption ||
-        m.viewOnceMessage?.message?.videoMessage?.caption ||
-        m.viewOnceMessageV2?.message?.imageMessage?.caption ||
-        m.viewOnceMessageV2?.message?.videoMessage?.caption ||
-        m.ephemeralMessage?.message?.conversation ||
-        m.ephemeralMessage?.message?.extendedTextMessage?.text ||
-        m.buttonsResponseMessage?.selectedDisplayText ||
-        m.listResponseMessage?.title ||
-        m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ||
-        m.templateButtonReplyMessage?.selectedDisplayText ||
-        "";
+        // ── Stale-message guard (per-connection) ──────────────────────────────
+        // Ignore messages sent more than 15 s before this connection opened.
+        const cutoff = entry.connectedAt - 15_000;
+        if (cutoff > 0 && sentAt < cutoff) {
+          console.log(`[whatsapp] Skipping stale message sentAt=${sentAt} cutoff=${cutoff}`);
+          continue;
+        }
 
-      // ── Group moderation (antilink / antitag / antibadword) ───────────────
-      if (isGroup && !msg.key.fromMe && body) {
-        // Antilink — only acts when bot is admin
-        if (settings.antiLink && containsLink(body)) {
-          const botIsAdmin = await isBotAdmin(sock, jid, botJid);
-          if (botIsAdmin) {
-            try {
-              await sock.sendMessage(jid, { delete: msg.key });
-              await sock.sendMessage(jid, {
-                text: "🔗 *Links are not allowed in this group.*",
-              });
-            } catch {}
+        // ── Skip protocol messages ────────────────────────────────────────────
+        const m = msg.message;
+        if (
+          m.protocolMessage ||
+          m.reactionMessage ||
+          m.pollUpdateMessage ||
+          m.keepInChatMessage
+        ) continue;
+
+        const settings = await getBotSettings(userId);
+        const isGroup = jid.endsWith("@g.us");
+        const botJid = sock.user?.id ?? "";
+        const senderJid = msg.key.fromMe
+          ? botJid
+          : (msg.key.participant ?? msg.key.remoteJid ?? "");
+
+        // Auto-read
+        if (settings.autoRead) {
+          try { await sock.readMessages([msg.key]); } catch {}
+        }
+
+        // Always online
+        if (settings.alwaysOnline) {
+          try { await sock.sendPresenceUpdate("available", jid); } catch {}
+        }
+
+        // ── Anti-sticker (before body extraction) ─────────────────────────────
+        if (isGroup && !msg.key.fromMe && settings.antiSticker && m.stickerMessage) {
+          const isAdmin = await isBotAdmin(sock, jid, botJid);
+          if (isAdmin) {
+            try { await sock.sendMessage(jid, { delete: msg.key }); } catch {}
             continue;
           }
         }
 
-        // Antitag — delete mass-mention messages (>= 5 mentions), bot must be admin
-        if (settings.antiTag) {
-          const mentionedJids =
-            m.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
-          if (mentionedJids.length >= 5) {
-            const botIsAdmin = await isBotAdmin(sock, jid, botJid);
-            if (botIsAdmin) {
+        // ── Body extraction ───────────────────────────────────────────────────
+        const body =
+          m.conversation ||
+          m.extendedTextMessage?.text ||
+          m.imageMessage?.caption ||
+          m.videoMessage?.caption ||
+          m.documentMessage?.caption ||
+          m.documentWithCaptionMessage?.message?.documentMessage?.caption ||
+          m.viewOnceMessage?.message?.imageMessage?.caption ||
+          m.viewOnceMessage?.message?.videoMessage?.caption ||
+          m.viewOnceMessageV2?.message?.imageMessage?.caption ||
+          m.viewOnceMessageV2?.message?.videoMessage?.caption ||
+          m.ephemeralMessage?.message?.conversation ||
+          m.ephemeralMessage?.message?.extendedTextMessage?.text ||
+          m.buttonsResponseMessage?.selectedDisplayText ||
+          m.listResponseMessage?.title ||
+          m.templateButtonReplyMessage?.selectedDisplayText ||
+          "";
+
+        // ── Group moderation ──────────────────────────────────────────────────
+        if (isGroup && !msg.key.fromMe && body) {
+          if (settings.antiLink && containsLink(body)) {
+            const isAdmin = await isBotAdmin(sock, jid, botJid);
+            if (isAdmin) {
               try {
                 await sock.sendMessage(jid, { delete: msg.key });
-                await sock.sendMessage(jid, {
-                  text: "🚫 *Mass tagging is not allowed in this group.*",
-                });
+                await sock.sendMessage(jid, { text: "🔗 *Links are not allowed in this group.*" });
               } catch {}
               continue;
             }
           }
-        }
 
-        // Antibadword — delete + kick, bot must be admin
-        if (settings.antiBadWord && settings.badWords) {
-          const wordsList = settings.badWords
-            .split(",")
-            .map((w) => w.trim())
-            .filter(Boolean);
-          if (wordsList.length > 0 && containsBadWord(body, wordsList)) {
-            const botIsAdmin = await isBotAdmin(sock, jid, botJid);
-            if (botIsAdmin) {
-              try {
-                await sock.sendMessage(jid, { delete: msg.key });
-                await sock.sendMessage(jid, {
-                  text: `⚠️ @${senderJid.split("@")[0]} was removed for using inappropriate language.`,
-                  mentions: [senderJid],
-                });
-                await sock.groupParticipantsUpdate(jid, [senderJid], "remove");
-              } catch {}
-              continue;
+          if (settings.antiTag) {
+            const mentionedJids = m.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
+            if (mentionedJids.length >= 5) {
+              const isAdmin = await isBotAdmin(sock, jid, botJid);
+              if (isAdmin) {
+                try {
+                  await sock.sendMessage(jid, { delete: msg.key });
+                  await sock.sendMessage(jid, { text: "🚫 *Mass tagging is not allowed in this group.*" });
+                } catch {}
+                continue;
+              }
+            }
+          }
+
+          if (settings.antiBadWord && settings.badWords) {
+            const wordsList = settings.badWords.split(",").map((w) => w.trim()).filter(Boolean);
+            if (wordsList.length > 0 && containsBadWord(body, wordsList)) {
+              const isAdmin = await isBotAdmin(sock, jid, botJid);
+              if (isAdmin) {
+                try {
+                  await sock.sendMessage(jid, { delete: msg.key });
+                  await sock.sendMessage(jid, {
+                    text: `⚠️ @${senderJid.split("@")[0]} was removed for using inappropriate language.`,
+                    mentions: [senderJid],
+                  });
+                  await sock.groupParticipantsUpdate(jid, [senderJid], "remove");
+                } catch {}
+                continue;
+              }
             }
           }
         }
-      }
 
-      if (!body.trim()) continue;
+        if (!body.trim()) continue;
 
-      console.log(`[msg] jid=${jid} fromMe=${msg.key.fromMe} body="${body.slice(0, 80)}"`);
+        console.log(`[msg] jid=${jid} fromMe=${msg.key.fromMe} body="${body.slice(0, 80)}"`);
 
-      // ── Typing / recording indicator when processing a command ────────────
-      if (settings.typingStatus && body.startsWith(settings.prefix)) {
-        try {
-          await sock.sendPresenceUpdate("composing", jid);
-        } catch {}
-        setTimeout(async () => {
-          try { await sock.sendPresenceUpdate("paused", jid); } catch {}
-        }, 3000);
-      }
+        // ── Typing indicator ──────────────────────────────────────────────────
+        if (settings.typingStatus && body.startsWith(settings.prefix)) {
+          try { await sock.sendPresenceUpdate("composing", jid); } catch {}
+          setTimeout(async () => {
+            try { await sock.sendPresenceUpdate("paused", jid); } catch {}
+          }, 3000);
+        }
 
-      // ── Command dispatch ──────────────────────────────────────────────────
-      if (body.startsWith(settings.prefix)) {
-        await handleCommand(sock, userId, jid, body, settings.prefix, sentAt, msg, settings.mode);
-        continue;
-      }
+        // ── Command dispatch ──────────────────────────────────────────────────
+        if (body.startsWith(settings.prefix)) {
+          console.log(`[cmd] dispatching: ${body.split(" ")[0]}`);
+          await handleCommand(sock, userId, jid, body, settings.prefix, sentAt, msg, settings.mode);
+          continue;
+        }
 
-      // ── Auto-reply chatbot (DMs only, not from bot itself) ────────────────
-      if (settings.autoReply && !msg.key.fromMe && !isGroup) {
-        const replyMsg =
-          settings.autoReplyMessage || "I'm currently unavailable. Please try later.";
-        try { await sock.sendMessage(jid, { text: replyMsg }); } catch {}
+        // ── Auto-reply (DMs only) ─────────────────────────────────────────────
+        if (settings.autoReply && !msg.key.fromMe && !isGroup) {
+          try {
+            await sock.sendMessage(jid, {
+              text: settings.autoReplyMessage || "I'm currently unavailable. Please try later.",
+            });
+          } catch {}
+        }
+
+      } catch (err) {
+        console.error("[whatsapp] Error processing message:", err);
       }
     }
   });
@@ -552,9 +556,12 @@ async function startSocket(
 export async function reconnectAllSavedSessions() {
   try {
     const saved = await db.select().from(whatsappAuthTable);
-    if (saved.length === 0) return;
+    if (saved.length === 0) {
+      console.log("[whatsapp] No saved sessions to reconnect.");
+      return;
+    }
 
-    console.log(`[whatsapp] Auto-reconnecting ${saved.length} saved session(s)...`);
+    console.log(`[whatsapp] Auto-reconnecting ${saved.length} saved session(s)…`);
 
     for (const row of saved) {
       if (!row.creds) continue;
@@ -566,7 +573,8 @@ export async function reconnectAllSavedSessions() {
         console.error(`[whatsapp] Failed to reconnect session for ${row.userId}:`, err);
       });
 
-      await new Promise((r) => setTimeout(r, 1500));
+      // Stagger reconnections to avoid hammering WhatsApp
+      await new Promise((r) => setTimeout(r, 2000));
     }
   } catch (err) {
     console.error("[whatsapp] Auto-reconnect error:", err);
@@ -575,15 +583,10 @@ export async function reconnectAllSavedSessions() {
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
-export async function requestQRCode(
-  userId: string
-): Promise<{ qrCode: string | null; status: string }> {
+export async function requestQRCode(userId: string) {
   const entry = getOrCreateEntry(userId);
 
-  if (entry.status === "online") {
-    return { qrCode: null, status: "online" };
-  }
-
+  if (entry.status === "online") return { qrCode: null, status: "online" };
   if (entry.status === "connecting" && entry.qrCode) {
     return { qrCode: entry.qrCode, status: "connecting" };
   }
@@ -593,56 +596,37 @@ export async function requestQRCode(
     await new Promise((r) => setTimeout(r, 3000));
   }
 
-  return {
-    qrCode: entry.qrCode,
-    status: entry.qrCode ? "connecting" : entry.status,
-  };
+  return { qrCode: entry.qrCode, status: entry.qrCode ? "connecting" : entry.status };
 }
 
-export async function requestPairingCode(
-  userId: string,
-  phoneNumber: string
-): Promise<string> {
+export async function requestPairingCode(userId: string, phoneNumber: string) {
   const entry = getOrCreateEntry(userId);
-
   const cleanPhone = phoneNumber.replace(/[^0-9]/g, "");
-  if (!cleanPhone || cleanPhone.length < 7) {
-    throw new Error("Invalid phone number");
-  }
+  if (!cleanPhone || cleanPhone.length < 7) throw new Error("Invalid phone number");
 
   let sock = entry.socket;
-
   if (!sock || entry.status === "offline") {
     sock = await startSocket(userId, entry);
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  if (entry.status === "online") {
-    throw new Error("Already connected");
-  }
-
-  const code = await sock!.requestPairingCode(cleanPhone);
-  return code;
+  if (entry.status === "online") throw new Error("Already connected");
+  return sock!.requestPairingCode(cleanPhone);
 }
 
-export async function disconnectSession(userId: string): Promise<void> {
+export async function disconnectSession(userId: string) {
   const entry = activeSessions.get(userId);
   if (entry?.socket) {
-    try {
-      await entry.socket.logout();
-    } catch {}
+    clearKeepalive(entry);
+    try { await entry.socket.logout(); } catch {}
     entry.socket = null;
     entry.status = "offline";
     entry.qrCode = null;
   }
   activeSessions.delete(userId);
-
   await clearDatabaseAuthState(userId);
-
   try {
-    await db
-      .update(botsTable)
-      .set({ status: "offline", phoneNumber: null })
+    await db.update(botsTable).set({ status: "offline", phoneNumber: null })
       .where(eq(botsTable.userId, userId));
   } catch {}
 }
