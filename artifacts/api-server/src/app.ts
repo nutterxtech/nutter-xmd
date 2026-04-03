@@ -35,7 +35,7 @@ app.use(
 const separateFrontend = !!process.env.CORS_ORIGIN;
 const staticDir =
   !separateFrontend && process.env.NODE_ENV === "production"
-    ? path.join(process.cwd(), "artifacts/nutter-xmd/dist/public")
+    ? path.join(process.cwd(), "artifacts/nutter-xmd/dist")
     : null;
 
 if (staticDir) {
@@ -88,7 +88,7 @@ if (staticDir) {
     if (req.path.startsWith("/api") || req.path.startsWith("/__clerk")) {
       return next();
     }
-    res.sendFile(path.join(staticDir, "index.html"));
+    res.sendFile(path.join(staticDir!, "index.html"));
   });
 }
 
