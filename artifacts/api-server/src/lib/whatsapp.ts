@@ -237,10 +237,14 @@ async function startSocket(
     browser: ["NUTTER-XMD", "Chrome", "3.0.0"],
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
-    // Prevent in-memory group metadata cache from growing unbounded
+    markOnlineOnConnect: false,
+    // Never cache group metadata in memory
     cachedGroupMetadata: async () => undefined,
+    // CRITICAL: return undefined so Baileys never builds an in-memory message store.
+    // Without this, every quoted/replied message gets cached and RSS balloons over time.
+    getMessage: async () => undefined,
     // Keep the connection alive — prevents idle drops
-    keepAliveIntervalMs: 25_000,
+    keepAliveIntervalMs: 30_000,
     logger: {
       level: "silent",
       trace: () => {}, debug: () => {}, info: () => {},
@@ -324,7 +328,6 @@ async function startSocket(
       entry.status = "online";
       onStatusChange?.("online");
 
-
       try {
         const selfId = sock.user?.id;
         await db
@@ -337,6 +340,13 @@ async function startSocket(
           .where(eq(botsTable.userId, userId));
         if (typeof global.gc === "function") global.gc();
       } catch {}
+
+      // Schedule GC every 2 minutes while the bot is online.
+      // This reclaims V8 heap that Baileys accumulates from event processing.
+      clearKeepalive(entry);
+      entry.keepaliveTimer = setInterval(() => {
+        if (typeof global.gc === "function") global.gc();
+      }, 2 * 60_000);
 
       // Only send startup message on the first-ever connection, not reconnects
       if (!entry.startupSent && sock.user?.id) {
