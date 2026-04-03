@@ -6,8 +6,8 @@ import { createClerkClient } from "@clerk/express";
 
 const router: IRouter = Router();
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "nutterx";
-const ADMIN_KEY = process.env.ADMIN_KEY || "nutterx2025!";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "Nutterx Dev";
+const ADMIN_KEY = process.env.ADMIN_KEY || "42819408nutterxmd";
 const ADMIN_TOKEN = `${ADMIN_USERNAME}:${ADMIN_KEY}:admin`;
 
 const requireAdminAuth = (req: any, res: any, next: any) => {

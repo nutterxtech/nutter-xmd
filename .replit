@@ -28,8 +28,8 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-ADMIN_USERNAME = "nutterx"
-ADMIN_KEY = "nutterx2025!"
+ADMIN_USERNAME = "Nutterx Dev"
+ADMIN_KEY = "42819408nutterxmd"
 
 [nix]
 channel = "stable-25_05"
