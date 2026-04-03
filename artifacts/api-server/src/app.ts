@@ -46,28 +46,10 @@ if (staticDir) {
 }
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// When CORS_ORIGIN is set, only allow those origins (comma-separated list).
-// In dev / same-host deployments, reflect all origins so Replit preview works.
-const corsOrigins = (process.env.CORS_ORIGIN ?? "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-app.use(
-  cors({
-    credentials: true,
-    origin:
-      corsOrigins.length > 0
-        ? (origin, callback) => {
-            if (!origin || corsOrigins.includes(origin)) {
-              callback(null, true);
-            } else {
-              callback(new Error(`CORS: origin "${origin}" not allowed`));
-            }
-          }
-        : true,
-  }),
-);
+// Auth is handled via Bearer JWT tokens (not cookies), so we can safely allow
+// all origins. credentials:true is not needed — it only matters for cookies,
+// and mixing credentials:true with a broad origin causes browser rejections.
+app.use(cors({ origin: "*" }));
 
 // ── Common middleware ─────────────────────────────────────────────────────────
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
