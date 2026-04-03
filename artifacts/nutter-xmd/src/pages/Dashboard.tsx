@@ -286,7 +286,7 @@ export default function Dashboard() {
                       <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     ) : qrData?.qrCode ? (
                       <img
-                        src={`data:image/png;base64,${qrData.qrCode}`}
+                        src={qrData.qrCode.startsWith("data:") ? qrData.qrCode : `data:image/png;base64,${qrData.qrCode}`}
                         alt="WhatsApp QR Code"
                         className="w-44 h-44 object-contain"
                         data-testid="img-qr-code"
@@ -326,7 +326,9 @@ export default function Dashboard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">Enter your phone number to receive a pairing code. Open WhatsApp → Linked Devices → Link with phone number.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Enter your WhatsApp number with country code (e.g. 254712345678). Then open WhatsApp → Settings → Linked Devices → Link a Device → <strong className="text-foreground">Link with phone number</strong>, and enter the code shown below.
+                  </p>
 
                   {!showPairInput ? (
                     <Button

@@ -3,6 +3,12 @@ import { eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { db, botsTable } from "@workspace/db";
 import { UpdateMyBotBody } from "@workspace/api-zod";
+import {
+  requestQRCode,
+  requestPairingCode,
+  disconnectSession,
+  getSessionStatus,
+} from "../lib/whatsapp.js";
 
 const router: IRouter = Router();
 
@@ -38,7 +44,8 @@ async function getOrCreateBot(userId: string) {
 router.get("/bot", requireAuth, async (req: any, res): Promise<void> => {
   try {
     const bot = await getOrCreateBot(req.userId);
-    res.json(bot);
+    const liveStatus = getSessionStatus(req.userId);
+    res.json({ ...bot, status: liveStatus === "offline" ? bot.status : liveStatus });
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }
@@ -63,29 +70,32 @@ router.put("/bot", requireAuth, async (req: any, res): Promise<void> => {
   res.json(updated);
 });
 
-// GET /api/bot/qr — get QR code for WhatsApp connection
+// GET /api/bot/qr — start session and get QR code for WhatsApp connection
 router.get("/bot/qr", requireAuth, async (req: any, res): Promise<void> => {
-  const bot = await getOrCreateBot(req.userId);
+  try {
+    const { qrCode, status } = await requestQRCode(req.userId);
 
-  if (bot.status === "online") {
-    res.json({ status: "online", qrCode: null });
-    return;
+    if (status === "online") {
+      await db
+        .update(botsTable)
+        .set({ status: "online" })
+        .where(eq(botsTable.userId, req.userId));
+      res.json({ status: "online", qrCode: null });
+      return;
+    }
+
+    await db
+      .update(botsTable)
+      .set({ status: "connecting" })
+      .where(eq(botsTable.userId, req.userId));
+
+    res.json({ status: "connecting", qrCode });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to get QR code" });
   }
-
-  // Simulate QR code generation (placeholder — real Baileys integration would go here)
-  await db
-    .update(botsTable)
-    .set({ status: "connecting" })
-    .where(eq(botsTable.id, bot.id));
-
-  res.json({
-    status: "connecting",
-    qrCode: null,
-    message: "Scan QR with WhatsApp to connect",
-  });
 });
 
-// POST /api/bot/pair — request pairing code
+// POST /api/bot/pair — request pairing code via phone number
 router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
   const { phoneNumber } = req.body;
   if (!phoneNumber) {
@@ -93,30 +103,39 @@ router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
     return;
   }
 
-  const bot = await getOrCreateBot(req.userId);
+  try {
+    const code = await requestPairingCode(req.userId, phoneNumber);
 
-  // Generate a mock pairing code (8 uppercase chars) — real impl would call Baileys
-  const code = Math.random().toString(36).toUpperCase().slice(2, 10);
+    await db
+      .update(botsTable)
+      .set({ status: "connecting", phoneNumber })
+      .where(eq(botsTable.userId, req.userId));
 
-  await db
-    .update(botsTable)
-    .set({ status: "connecting", phoneNumber })
-    .where(eq(botsTable.id, bot.id));
-
-  res.json({ code });
+    res.json({ code });
+  } catch (err: any) {
+    if (err.message === "Already connected") {
+      res.status(400).json({ error: "Bot is already connected" });
+      return;
+    }
+    res.status(500).json({ error: err.message || "Failed to generate pairing code" });
+  }
 });
 
 // POST /api/bot/disconnect — disconnect bot
 router.post("/bot/disconnect", requireAuth, async (req: any, res): Promise<void> => {
-  const bot = await getOrCreateBot(req.userId);
+  try {
+    await disconnectSession(req.userId);
 
-  const [updated] = await db
-    .update(botsTable)
-    .set({ status: "offline", phoneNumber: null })
-    .where(eq(botsTable.id, bot.id))
-    .returning();
+    const [updated] = await db
+      .update(botsTable)
+      .set({ status: "offline", phoneNumber: null })
+      .where(eq(botsTable.userId, req.userId))
+      .returning();
 
-  res.json(updated);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to disconnect" });
+  }
 });
 
 export default router;
