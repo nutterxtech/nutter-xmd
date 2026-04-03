@@ -360,11 +360,27 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers });
+  } catch (networkErr) {
+    console.error(
+      `[API] Network error — ${method} ${requestInfo.url}\n` +
+      `  → Could not reach server. Check VITE_API_URL and that the backend is running.\n` +
+      `  → Configured base URL: ${_baseUrl ?? "(none — using relative paths)"}\n` +
+      `  → Raw error:`, networkErr
+    );
+    throw networkErr;
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+    const err = new ApiError(response, errorData, requestInfo);
+    console.error(
+      `[API] ${response.status} ${response.statusText} — ${method} ${requestInfo.url}\n` +
+      `  → ${err.message}`
+    );
+    throw err;
   }
 
   return (await parseSuccessBody(response, responseType, requestInfo)) as T;

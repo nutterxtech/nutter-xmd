@@ -62,7 +62,7 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: bot, isLoading, isError: botError } = useGetMyBot();
+  const { data: bot, isLoading, isError: botError, error: botFetchError } = useGetMyBot();
   const { data: qrData, isLoading: qrLoading, refetch: refetchQR } = useGetBotQR({
     query: { enabled: false, queryKey: getGetBotQRQueryKey() },
   });
@@ -207,16 +207,30 @@ export default function Dashboard() {
   }
 
   if (botError) {
+    const errAny = botFetchError as any;
+    const status: number | undefined = errAny?.status;
+    const errMsg: string = errAny?.message ?? String(botFetchError ?? "Unknown error");
+    const isNetworkError = !status;
+    const apiUrl = (import.meta.env.VITE_API_URL as string | undefined) ?? "(not set — relative paths)";
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
         <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-destructive/50 bg-destructive/10">
           <WifiOff className="w-7 h-7 text-destructive" />
         </div>
-        <div>
-          <h2 className="text-lg font-semibold text-destructive mb-1">Cannot reach server</h2>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            The backend is unavailable right now. This usually means the server is restarting — wait 30 seconds and try again.
+        <div className="max-w-sm">
+          <h2 className="text-lg font-semibold text-destructive mb-1">
+            {isNetworkError ? "Cannot reach server" : `Server error ${status}`}
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            {isNetworkError
+              ? "Network request failed — the backend may be down or CORS is blocking the request."
+              : errMsg}
           </p>
+          <div className="text-left bg-muted/20 border border-border rounded-lg p-3 text-xs font-mono space-y-1">
+            <div><span className="text-muted-foreground">API URL: </span><span className="text-foreground break-all">{apiUrl}</span></div>
+            {status && <div><span className="text-muted-foreground">Status: </span><span className="text-destructive">{status}</span></div>}
+          </div>
         </div>
         <button
           onClick={() => queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() })}
