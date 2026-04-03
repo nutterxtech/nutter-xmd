@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface AdminStats {
-  totalUsers: number;
-  totalBots: number;
-  activeBots: number;
-  onlineBots: number;
+export interface PairCodeBody {
+  /** Phone number with country code (e.g. +254712345678) */
+  phoneNumber: string;
 }

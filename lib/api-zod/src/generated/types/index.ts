@@ -3,21 +3,18 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
-export * from "./adminBot";
 export * from "./adminLoginBody";
-export * from "./adminLoginResponse";
 export * from "./adminStats";
+export * from "./adminToken";
 export * from "./bot";
-export * from "./botCommand";
+export * from "./botMode";
 export * from "./botStatus";
-export * from "./createBotBody";
-export * from "./createBotCommandBody";
-export * from "./dashboardStats";
 export * from "./healthStatus";
-export * from "./qRCodeResponse";
-export * from "./qRCodeResponseStatus";
+export * from "./pairCodeBody";
+export * from "./pairCodeData";
+export * from "./qRData";
 export * from "./updateBotBody";
-export * from "./updateBotCommandBody";
+export * from "./updateBotBodyMode";

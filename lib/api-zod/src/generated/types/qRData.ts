@@ -6,9 +6,8 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export interface AdminStats {
-  totalUsers: number;
-  totalBots: number;
-  activeBots: number;
-  onlineBots: number;
+export interface QRData {
+  status: string;
+  /** Base64-encoded QR code image */
+  qrCode?: string | null;
 }

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
@@ -17,19 +17,15 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
-  AdminBot,
   AdminLoginBody,
-  AdminLoginResponse,
   AdminStats,
+  AdminToken,
   Bot,
-  BotCommand,
-  CreateBotBody,
-  CreateBotCommandBody,
-  DashboardStats,
   HealthStatus,
-  QRCodeResponse,
+  PairCodeBody,
+  PairCodeData,
+  QRData,
   UpdateBotBody,
-  UpdateBotCommandBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -42,7 +38,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -118,62 +113,62 @@ export function useHealthCheck<
 }
 
 /**
- * @summary List all bots for authenticated user
+ * @summary Get the current user's bot (auto-creates if not exists)
  */
-export const getListBotsUrl = () => {
-  return `/api/bots`;
+export const getGetMyBotUrl = () => {
+  return `/api/bot`;
 };
 
-export const listBots = async (options?: RequestInit): Promise<Bot[]> => {
-  return customFetch<Bot[]>(getListBotsUrl(), {
+export const getMyBot = async (options?: RequestInit): Promise<Bot> => {
+  return customFetch<Bot>(getGetMyBotUrl(), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListBotsQueryKey = () => {
-  return [`/api/bots`] as const;
+export const getGetMyBotQueryKey = () => {
+  return [`/api/bot`] as const;
 };
 
-export const getListBotsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listBots>>,
+export const getGetMyBotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyBot>>,
   TError = ErrorType<void>,
 >(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listBots>>, TError, TData>;
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMyBot>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListBotsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetMyBotQueryKey();
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listBots>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyBot>>> = ({
     signal,
-  }) => listBots({ signal, ...requestOptions });
+  }) => getMyBot({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listBots>>,
+    Awaited<ReturnType<typeof getMyBot>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type ListBotsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listBots>>
+export type GetMyBotQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyBot>>
 >;
-export type ListBotsQueryError = ErrorType<void>;
+export type GetMyBotQueryError = ErrorType<void>;
 
 /**
- * @summary List all bots for authenticated user
+ * @summary Get the current user's bot (auto-creates if not exists)
  */
 
-export function useListBots<
-  TData = Awaited<ReturnType<typeof listBots>>,
+export function useGetMyBot<
+  TData = Awaited<ReturnType<typeof getMyBot>>,
   TError = ErrorType<void>,
 >(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listBots>>, TError, TData>;
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMyBot>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListBotsQueryOptions(options);
+  const queryOptions = getGetMyBotQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -183,204 +178,42 @@ export function useListBots<
 }
 
 /**
- * @summary Create a new bot
+ * @summary Update the current user's bot settings
  */
-export const getCreateBotUrl = () => {
-  return `/api/bots`;
+export const getUpdateMyBotUrl = () => {
+  return `/api/bot`;
 };
 
-export const createBot = async (
-  createBotBody: CreateBotBody,
-  options?: RequestInit,
-): Promise<Bot> => {
-  return customFetch<Bot>(getCreateBotUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createBotBody),
-  });
-};
-
-export const getCreateBotMutationOptions = <
-  TError = ErrorType<void>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBot>>,
-    TError,
-    { data: BodyType<CreateBotBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createBot>>,
-  TError,
-  { data: BodyType<CreateBotBody> },
-  TContext
-> => {
-  const mutationKey = ["createBot"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createBot>>,
-    { data: BodyType<CreateBotBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return createBot(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateBotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createBot>>
->;
-export type CreateBotMutationBody = BodyType<CreateBotBody>;
-export type CreateBotMutationError = ErrorType<void>;
-
-/**
- * @summary Create a new bot
- */
-export const useCreateBot = <
-  TError = ErrorType<void>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBot>>,
-    TError,
-    { data: BodyType<CreateBotBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createBot>>,
-  TError,
-  { data: BodyType<CreateBotBody> },
-  TContext
-> => {
-  return useMutation(getCreateBotMutationOptions(options));
-};
-
-/**
- * @summary Get a bot by ID
- */
-export const getGetBotUrl = (id: number) => {
-  return `/api/bots/${id}`;
-};
-
-export const getBot = async (
-  id: number,
-  options?: RequestInit,
-): Promise<Bot> => {
-  return customFetch<Bot>(getGetBotUrl(id), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetBotQueryKey = (id: number) => {
-  return [`/api/bots/${id}`] as const;
-};
-
-export const getGetBotQueryOptions = <
-  TData = Awaited<ReturnType<typeof getBot>>,
-  TError = ErrorType<void>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getBot>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetBotQueryKey(id);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBot>>> = ({
-    signal,
-  }) => getBot(id, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getBot>>, TError, TData> & {
-    queryKey: QueryKey;
-  };
-};
-
-export type GetBotQueryResult = NonNullable<Awaited<ReturnType<typeof getBot>>>;
-export type GetBotQueryError = ErrorType<void>;
-
-/**
- * @summary Get a bot by ID
- */
-
-export function useGetBot<
-  TData = Awaited<ReturnType<typeof getBot>>,
-  TError = ErrorType<void>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<Awaited<ReturnType<typeof getBot>>, TError, TData>;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetBotQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Update a bot
- */
-export const getUpdateBotUrl = (id: number) => {
-  return `/api/bots/${id}`;
-};
-
-export const updateBot = async (
-  id: number,
+export const updateMyBot = async (
   updateBotBody: UpdateBotBody,
   options?: RequestInit,
 ): Promise<Bot> => {
-  return customFetch<Bot>(getUpdateBotUrl(id), {
+  return customFetch<Bot>(getUpdateMyBotUrl(), {
     ...options,
-    method: "PATCH",
+    method: "PUT",
     headers: { "Content-Type": "application/json", ...options?.headers },
     body: JSON.stringify(updateBotBody),
   });
 };
 
-export const getUpdateBotMutationOptions = <
+export const getUpdateMyBotMutationOptions = <
   TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateBot>>,
+    Awaited<ReturnType<typeof updateMyBot>>,
     TError,
-    { id: number; data: BodyType<UpdateBotBody> },
+    { data: BodyType<UpdateBotBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof updateBot>>,
+  Awaited<ReturnType<typeof updateMyBot>>,
   TError,
-  { id: number; data: BodyType<UpdateBotBody> },
+  { data: BodyType<UpdateBotBody> },
   TContext
 > => {
-  const mutationKey = ["updateBot"];
+  const mutationKey = ["updateMyBot"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -390,181 +223,84 @@ export const getUpdateBotMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateBot>>,
-    { id: number; data: BodyType<UpdateBotBody> }
+    Awaited<ReturnType<typeof updateMyBot>>,
+    { data: BodyType<UpdateBotBody> }
   > = (props) => {
-    const { id, data } = props ?? {};
+    const { data } = props ?? {};
 
-    return updateBot(id, data, requestOptions);
+    return updateMyBot(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type UpdateBotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateBot>>
+export type UpdateMyBotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMyBot>>
 >;
-export type UpdateBotMutationBody = BodyType<UpdateBotBody>;
-export type UpdateBotMutationError = ErrorType<void>;
+export type UpdateMyBotMutationBody = BodyType<UpdateBotBody>;
+export type UpdateMyBotMutationError = ErrorType<void>;
 
 /**
- * @summary Update a bot
+ * @summary Update the current user's bot settings
  */
-export const useUpdateBot = <
+export const useUpdateMyBot = <
   TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateBot>>,
+    Awaited<ReturnType<typeof updateMyBot>>,
     TError,
-    { id: number; data: BodyType<UpdateBotBody> },
+    { data: BodyType<UpdateBotBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof updateBot>>,
+  Awaited<ReturnType<typeof updateMyBot>>,
   TError,
-  { id: number; data: BodyType<UpdateBotBody> },
+  { data: BodyType<UpdateBotBody> },
   TContext
 > => {
-  return useMutation(getUpdateBotMutationOptions(options));
+  return useMutation(getUpdateMyBotMutationOptions(options));
 };
 
 /**
- * @summary Delete a bot
+ * @summary Get QR code for WhatsApp connection
  */
-export const getDeleteBotUrl = (id: number) => {
-  return `/api/bots/${id}`;
+export const getGetBotQRUrl = () => {
+  return `/api/bot/qr`;
 };
 
-export const deleteBot = async (
-  id: number,
-  options?: RequestInit,
-): Promise<void> => {
-  return customFetch<void>(getDeleteBotUrl(id), {
-    ...options,
-    method: "DELETE",
-  });
-};
-
-export const getDeleteBotMutationOptions = <
-  TError = ErrorType<void>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteBot>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof deleteBot>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  const mutationKey = ["deleteBot"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof deleteBot>>,
-    { id: number }
-  > = (props) => {
-    const { id } = props ?? {};
-
-    return deleteBot(id, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type DeleteBotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof deleteBot>>
->;
-
-export type DeleteBotMutationError = ErrorType<void>;
-
-/**
- * @summary Delete a bot
- */
-export const useDeleteBot = <
-  TError = ErrorType<void>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteBot>>,
-    TError,
-    { id: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof deleteBot>>,
-  TError,
-  { id: number },
-  TContext
-> => {
-  return useMutation(getDeleteBotMutationOptions(options));
-};
-
-/**
- * @summary Get QR code for bot WhatsApp connection
- */
-export const getGetBotQRUrl = (id: number) => {
-  return `/api/bots/${id}/qr`;
-};
-
-export const getBotQR = async (
-  id: number,
-  options?: RequestInit,
-): Promise<QRCodeResponse> => {
-  return customFetch<QRCodeResponse>(getGetBotQRUrl(id), {
+export const getBotQR = async (options?: RequestInit): Promise<QRData> => {
+  return customFetch<QRData>(getGetBotQRUrl(), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetBotQRQueryKey = (id: number) => {
-  return [`/api/bots/${id}/qr`] as const;
+export const getGetBotQRQueryKey = () => {
+  return [`/api/bot/qr`] as const;
 };
 
 export const getGetBotQRQueryOptions = <
   TData = Awaited<ReturnType<typeof getBotQR>>,
   TError = ErrorType<void>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getBotQR>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getBotQR>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetBotQRQueryKey(id);
+  const queryKey = queryOptions?.queryKey ?? getGetBotQRQueryKey();
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getBotQR>>> = ({
     signal,
-  }) => getBotQR(id, { signal, ...requestOptions });
+  }) => getBotQR({ signal, ...requestOptions });
 
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof getBotQR>>, TError, TData> & {
-    queryKey: QueryKey;
-  };
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBotQR>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
 };
 
 export type GetBotQRQueryResult = NonNullable<
@@ -573,24 +309,17 @@ export type GetBotQRQueryResult = NonNullable<
 export type GetBotQRQueryError = ErrorType<void>;
 
 /**
- * @summary Get QR code for bot WhatsApp connection
+ * @summary Get QR code for WhatsApp connection
  */
 
 export function useGetBotQR<
   TData = Awaited<ReturnType<typeof getBotQR>>,
   TError = ErrorType<void>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getBotQR>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetBotQRQueryOptions(id, options);
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getBotQR>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBotQRQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -600,37 +329,120 @@ export function useGetBotQR<
 }
 
 /**
- * @summary Disconnect bot from WhatsApp
+ * @summary Request a pairing code for phone number link
  */
-export const getDisconnectBotUrl = (id: number) => {
-  return `/api/bots/${id}/disconnect`;
+export const getGetBotPairCodeUrl = () => {
+  return `/api/bot/pair`;
 };
 
-export const disconnectBot = async (
-  id: number,
+export const getBotPairCode = async (
+  pairCodeBody: PairCodeBody,
   options?: RequestInit,
-): Promise<Bot> => {
-  return customFetch<Bot>(getDisconnectBotUrl(id), {
+): Promise<PairCodeData> => {
+  return customFetch<PairCodeData>(getGetBotPairCodeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(pairCodeBody),
+  });
+};
+
+export const getGetBotPairCodeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof getBotPairCode>>,
+    TError,
+    { data: BodyType<PairCodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof getBotPairCode>>,
+  TError,
+  { data: BodyType<PairCodeBody> },
+  TContext
+> => {
+  const mutationKey = ["getBotPairCode"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof getBotPairCode>>,
+    { data: BodyType<PairCodeBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return getBotPairCode(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GetBotPairCodeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof getBotPairCode>>
+>;
+export type GetBotPairCodeMutationBody = BodyType<PairCodeBody>;
+export type GetBotPairCodeMutationError = ErrorType<void>;
+
+/**
+ * @summary Request a pairing code for phone number link
+ */
+export const useGetBotPairCode = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof getBotPairCode>>,
+    TError,
+    { data: BodyType<PairCodeBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof getBotPairCode>>,
+  TError,
+  { data: BodyType<PairCodeBody> },
+  TContext
+> => {
+  return useMutation(getGetBotPairCodeMutationOptions(options));
+};
+
+/**
+ * @summary Disconnect the bot from WhatsApp
+ */
+export const getDisconnectBotUrl = () => {
+  return `/api/bot/disconnect`;
+};
+
+export const disconnectBot = async (options?: RequestInit): Promise<Bot> => {
+  return customFetch<Bot>(getDisconnectBotUrl(), {
     ...options,
     method: "POST",
   });
 };
 
 export const getDisconnectBotMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof disconnectBot>>,
     TError,
-    { id: number },
+    void,
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof disconnectBot>>,
   TError,
-  { id: number },
+  void,
   TContext
 > => {
   const mutationKey = ["disconnectBot"];
@@ -644,11 +456,9 @@ export const getDisconnectBotMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof disconnectBot>>,
-    { id: number }
-  > = (props) => {
-    const { id } = props ?? {};
-
-    return disconnectBot(id, requestOptions);
+    void
+  > = () => {
+    return disconnectBot(requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -658,452 +468,30 @@ export type DisconnectBotMutationResult = NonNullable<
   Awaited<ReturnType<typeof disconnectBot>>
 >;
 
-export type DisconnectBotMutationError = ErrorType<unknown>;
+export type DisconnectBotMutationError = ErrorType<void>;
 
 /**
- * @summary Disconnect bot from WhatsApp
+ * @summary Disconnect the bot from WhatsApp
  */
 export const useDisconnectBot = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof disconnectBot>>,
     TError,
-    { id: number },
+    void,
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof disconnectBot>>,
   TError,
-  { id: number },
+  void,
   TContext
 > => {
   return useMutation(getDisconnectBotMutationOptions(options));
 };
-
-/**
- * @summary List commands for a bot
- */
-export const getListBotCommandsUrl = (id: number) => {
-  return `/api/bots/${id}/commands`;
-};
-
-export const listBotCommands = async (
-  id: number,
-  options?: RequestInit,
-): Promise<BotCommand[]> => {
-  return customFetch<BotCommand[]>(getListBotCommandsUrl(id), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getListBotCommandsQueryKey = (id: number) => {
-  return [`/api/bots/${id}/commands`] as const;
-};
-
-export const getListBotCommandsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listBotCommands>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listBotCommands>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getListBotCommandsQueryKey(id);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listBotCommands>>> = ({
-    signal,
-  }) => listBotCommands(id, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listBotCommands>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListBotCommandsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listBotCommands>>
->;
-export type ListBotCommandsQueryError = ErrorType<unknown>;
-
-/**
- * @summary List commands for a bot
- */
-
-export function useListBotCommands<
-  TData = Awaited<ReturnType<typeof listBotCommands>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listBotCommands>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListBotCommandsQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Create a command for a bot
- */
-export const getCreateBotCommandUrl = (id: number) => {
-  return `/api/bots/${id}/commands`;
-};
-
-export const createBotCommand = async (
-  id: number,
-  createBotCommandBody: CreateBotCommandBody,
-  options?: RequestInit,
-): Promise<BotCommand> => {
-  return customFetch<BotCommand>(getCreateBotCommandUrl(id), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createBotCommandBody),
-  });
-};
-
-export const getCreateBotCommandMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBotCommand>>,
-    TError,
-    { id: number; data: BodyType<CreateBotCommandBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createBotCommand>>,
-  TError,
-  { id: number; data: BodyType<CreateBotCommandBody> },
-  TContext
-> => {
-  const mutationKey = ["createBotCommand"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createBotCommand>>,
-    { id: number; data: BodyType<CreateBotCommandBody> }
-  > = (props) => {
-    const { id, data } = props ?? {};
-
-    return createBotCommand(id, data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateBotCommandMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createBotCommand>>
->;
-export type CreateBotCommandMutationBody = BodyType<CreateBotCommandBody>;
-export type CreateBotCommandMutationError = ErrorType<unknown>;
-
-/**
- * @summary Create a command for a bot
- */
-export const useCreateBotCommand = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createBotCommand>>,
-    TError,
-    { id: number; data: BodyType<CreateBotCommandBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createBotCommand>>,
-  TError,
-  { id: number; data: BodyType<CreateBotCommandBody> },
-  TContext
-> => {
-  return useMutation(getCreateBotCommandMutationOptions(options));
-};
-
-/**
- * @summary Update a bot command
- */
-export const getUpdateBotCommandUrl = (id: number, commandId: number) => {
-  return `/api/bots/${id}/commands/${commandId}`;
-};
-
-export const updateBotCommand = async (
-  id: number,
-  commandId: number,
-  updateBotCommandBody: UpdateBotCommandBody,
-  options?: RequestInit,
-): Promise<BotCommand> => {
-  return customFetch<BotCommand>(getUpdateBotCommandUrl(id, commandId), {
-    ...options,
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(updateBotCommandBody),
-  });
-};
-
-export const getUpdateBotCommandMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateBotCommand>>,
-    TError,
-    { id: number; commandId: number; data: BodyType<UpdateBotCommandBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateBotCommand>>,
-  TError,
-  { id: number; commandId: number; data: BodyType<UpdateBotCommandBody> },
-  TContext
-> => {
-  const mutationKey = ["updateBotCommand"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateBotCommand>>,
-    { id: number; commandId: number; data: BodyType<UpdateBotCommandBody> }
-  > = (props) => {
-    const { id, commandId, data } = props ?? {};
-
-    return updateBotCommand(id, commandId, data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type UpdateBotCommandMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateBotCommand>>
->;
-export type UpdateBotCommandMutationBody = BodyType<UpdateBotCommandBody>;
-export type UpdateBotCommandMutationError = ErrorType<unknown>;
-
-/**
- * @summary Update a bot command
- */
-export const useUpdateBotCommand = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateBotCommand>>,
-    TError,
-    { id: number; commandId: number; data: BodyType<UpdateBotCommandBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof updateBotCommand>>,
-  TError,
-  { id: number; commandId: number; data: BodyType<UpdateBotCommandBody> },
-  TContext
-> => {
-  return useMutation(getUpdateBotCommandMutationOptions(options));
-};
-
-/**
- * @summary Delete a bot command
- */
-export const getDeleteBotCommandUrl = (id: number, commandId: number) => {
-  return `/api/bots/${id}/commands/${commandId}`;
-};
-
-export const deleteBotCommand = async (
-  id: number,
-  commandId: number,
-  options?: RequestInit,
-): Promise<void> => {
-  return customFetch<void>(getDeleteBotCommandUrl(id, commandId), {
-    ...options,
-    method: "DELETE",
-  });
-};
-
-export const getDeleteBotCommandMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteBotCommand>>,
-    TError,
-    { id: number; commandId: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof deleteBotCommand>>,
-  TError,
-  { id: number; commandId: number },
-  TContext
-> => {
-  const mutationKey = ["deleteBotCommand"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof deleteBotCommand>>,
-    { id: number; commandId: number }
-  > = (props) => {
-    const { id, commandId } = props ?? {};
-
-    return deleteBotCommand(id, commandId, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type DeleteBotCommandMutationResult = NonNullable<
-  Awaited<ReturnType<typeof deleteBotCommand>>
->;
-
-export type DeleteBotCommandMutationError = ErrorType<unknown>;
-
-/**
- * @summary Delete a bot command
- */
-export const useDeleteBotCommand = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteBotCommand>>,
-    TError,
-    { id: number; commandId: number },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof deleteBotCommand>>,
-  TError,
-  { id: number; commandId: number },
-  TContext
-> => {
-  return useMutation(getDeleteBotCommandMutationOptions(options));
-};
-
-/**
- * @summary Get dashboard statistics for the current user
- */
-export const getGetDashboardStatsUrl = () => {
-  return `/api/dashboard/stats`;
-};
-
-export const getDashboardStats = async (
-  options?: RequestInit,
-): Promise<DashboardStats> => {
-  return customFetch<DashboardStats>(getGetDashboardStatsUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetDashboardStatsQueryKey = () => {
-  return [`/api/dashboard/stats`] as const;
-};
-
-export const getGetDashboardStatsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getDashboardStats>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetDashboardStatsQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getDashboardStats>>
-  > = ({ signal }) => getDashboardStats({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardStats>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetDashboardStatsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDashboardStats>>
->;
-export type GetDashboardStatsQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get dashboard statistics for the current user
- */
-
-export function useGetDashboardStats<
-  TData = Awaited<ReturnType<typeof getDashboardStats>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDashboardStats>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDashboardStatsQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
 
 /**
  * @summary Admin login
@@ -1115,8 +503,8 @@ export const getAdminLoginUrl = () => {
 export const adminLogin = async (
   adminLoginBody: AdminLoginBody,
   options?: RequestInit,
-): Promise<AdminLoginResponse> => {
-  return customFetch<AdminLoginResponse>(getAdminLoginUrl(), {
+): Promise<AdminToken> => {
+  return customFetch<AdminToken>(getAdminLoginUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -1192,7 +580,7 @@ export const useAdminLogin = <
 };
 
 /**
- * @summary Admin - list all bots across all users
+ * @summary List all bots on the platform
  */
 export const getAdminListAllBotsUrl = () => {
   return `/api/admin/bots`;
@@ -1200,8 +588,8 @@ export const getAdminListAllBotsUrl = () => {
 
 export const adminListAllBots = async (
   options?: RequestInit,
-): Promise<AdminBot[]> => {
-  return customFetch<AdminBot[]>(getAdminListAllBotsUrl(), {
+): Promise<Bot[]> => {
+  return customFetch<Bot[]>(getAdminListAllBotsUrl(), {
     ...options,
     method: "GET",
   });
@@ -1243,7 +631,7 @@ export type AdminListAllBotsQueryResult = NonNullable<
 export type AdminListAllBotsQueryError = ErrorType<void>;
 
 /**
- * @summary Admin - list all bots across all users
+ * @summary List all bots on the platform
  */
 
 export function useAdminListAllBots<
@@ -1267,7 +655,7 @@ export function useAdminListAllBots<
 }
 
 /**
- * @summary Admin - activate a bot
+ * @summary Activate a bot
  */
 export const getAdminActivateBotUrl = (id: number) => {
   return `/api/admin/bots/${id}/activate`;
@@ -1276,15 +664,15 @@ export const getAdminActivateBotUrl = (id: number) => {
 export const adminActivateBot = async (
   id: number,
   options?: RequestInit,
-): Promise<AdminBot> => {
-  return customFetch<AdminBot>(getAdminActivateBotUrl(id), {
+): Promise<Bot> => {
+  return customFetch<Bot>(getAdminActivateBotUrl(id), {
     ...options,
     method: "POST",
   });
 };
 
 export const getAdminActivateBotMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1325,13 +713,13 @@ export type AdminActivateBotMutationResult = NonNullable<
   Awaited<ReturnType<typeof adminActivateBot>>
 >;
 
-export type AdminActivateBotMutationError = ErrorType<unknown>;
+export type AdminActivateBotMutationError = ErrorType<void>;
 
 /**
- * @summary Admin - activate a bot
+ * @summary Activate a bot
  */
 export const useAdminActivateBot = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1351,7 +739,7 @@ export const useAdminActivateBot = <
 };
 
 /**
- * @summary Admin - deactivate a bot
+ * @summary Deactivate a bot
  */
 export const getAdminDeactivateBotUrl = (id: number) => {
   return `/api/admin/bots/${id}/deactivate`;
@@ -1360,15 +748,15 @@ export const getAdminDeactivateBotUrl = (id: number) => {
 export const adminDeactivateBot = async (
   id: number,
   options?: RequestInit,
-): Promise<AdminBot> => {
-  return customFetch<AdminBot>(getAdminDeactivateBotUrl(id), {
+): Promise<Bot> => {
+  return customFetch<Bot>(getAdminDeactivateBotUrl(id), {
     ...options,
     method: "POST",
   });
 };
 
 export const getAdminDeactivateBotMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1409,13 +797,13 @@ export type AdminDeactivateBotMutationResult = NonNullable<
   Awaited<ReturnType<typeof adminDeactivateBot>>
 >;
 
-export type AdminDeactivateBotMutationError = ErrorType<unknown>;
+export type AdminDeactivateBotMutationError = ErrorType<void>;
 
 /**
- * @summary Admin - deactivate a bot
+ * @summary Deactivate a bot
  */
 export const useAdminDeactivateBot = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1435,7 +823,7 @@ export const useAdminDeactivateBot = <
 };
 
 /**
- * @summary Admin - platform-wide statistics
+ * @summary Get platform stats
  */
 export const getAdminGetStatsUrl = () => {
   return `/api/admin/stats`;
@@ -1456,7 +844,7 @@ export const getAdminGetStatsQueryKey = () => {
 
 export const getAdminGetStatsQueryOptions = <
   TData = Awaited<ReturnType<typeof adminGetStats>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof adminGetStats>>,
@@ -1483,15 +871,15 @@ export const getAdminGetStatsQueryOptions = <
 export type AdminGetStatsQueryResult = NonNullable<
   Awaited<ReturnType<typeof adminGetStats>>
 >;
-export type AdminGetStatsQueryError = ErrorType<unknown>;
+export type AdminGetStatsQueryError = ErrorType<void>;
 
 /**
- * @summary Admin - platform-wide statistics
+ * @summary Get platform stats
  */
 
 export function useAdminGetStats<
   TData = Awaited<ReturnType<typeof adminGetStats>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<void>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof adminGetStats>>,

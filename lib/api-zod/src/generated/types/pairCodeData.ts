@@ -3,10 +3,10 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
-export interface AdminLoginResponse {
-  token: string;
-  message: string;
+export interface PairCodeData {
+  /** 8-digit pairing code */
+  code: string;
 }

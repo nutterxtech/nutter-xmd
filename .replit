@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -30,3 +30,6 @@ timeoutMs = 20000
 [userenv.shared]
 ADMIN_USERNAME = "nutterx"
 ADMIN_KEY = "nutterx2025!"
+
+[nix]
+channel = "stable-25_05"

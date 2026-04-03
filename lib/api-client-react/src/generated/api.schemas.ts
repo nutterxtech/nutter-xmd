@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
@@ -12,102 +12,87 @@ export interface HealthStatus {
 export type BotStatus = (typeof BotStatus)[keyof typeof BotStatus];
 
 export const BotStatus = {
+  online: "online",
   offline: "offline",
   connecting: "connecting",
-  online: "online",
   banned: "banned",
+} as const;
+
+export type BotMode = (typeof BotMode)[keyof typeof BotMode];
+
+export const BotMode = {
+  private: "private",
+  public: "public",
 } as const;
 
 export interface Bot {
   id: number;
   userId: string;
   name: string;
-  /** @nullable */
-  description?: string | null;
   status: BotStatus;
   isActive: boolean;
-  /** @nullable */
   phoneNumber?: string | null;
-  /** @nullable */
-  sessionData?: string | null;
-  autoReply: boolean;
-  /** @nullable */
-  autoReplyMessage?: string | null;
   prefix: string;
+  mode: BotMode;
+  autoReply: boolean;
+  autoReplyMessage?: string | null;
+  antiCall: boolean;
+  antiLink: boolean;
+  antiSpam: boolean;
+  welcomeMessage: boolean;
+  goodbyeMessage: boolean;
+  autoRead: boolean;
+  typingStatus: boolean;
+  alwaysOnline: boolean;
+  autoStatus: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface CreateBotBody {
-  name: string;
-  /** @nullable */
-  description?: string | null;
-  prefix: string;
-  autoReply?: boolean;
-  /** @nullable */
-  autoReplyMessage?: string | null;
-}
+export type UpdateBotBodyMode =
+  (typeof UpdateBotBodyMode)[keyof typeof UpdateBotBodyMode];
 
-export interface UpdateBotBody {
-  name?: string;
-  /** @nullable */
-  description?: string | null;
-  prefix?: string;
-  autoReply?: boolean;
-  /** @nullable */
-  autoReplyMessage?: string | null;
-  isActive?: boolean;
-}
-
-export type QRCodeResponseStatus =
-  (typeof QRCodeResponseStatus)[keyof typeof QRCodeResponseStatus];
-
-export const QRCodeResponseStatus = {
-  pending: "pending",
-  ready: "ready",
-  connected: "connected",
-  error: "error",
+export const UpdateBotBodyMode = {
+  private: "private",
+  public: "public",
 } as const;
 
-export interface QRCodeResponse {
-  /** @nullable */
+export interface UpdateBotBody {
+  /** @minLength 1 */
+  name?: string;
+  /**
+   * @minLength 1
+   * @maxLength 5
+   */
+  prefix?: string;
+  mode?: UpdateBotBodyMode;
+  autoReply?: boolean;
+  autoReplyMessage?: string;
+  antiCall?: boolean;
+  antiLink?: boolean;
+  antiSpam?: boolean;
+  welcomeMessage?: boolean;
+  goodbyeMessage?: boolean;
+  autoRead?: boolean;
+  typingStatus?: boolean;
+  alwaysOnline?: boolean;
+  autoStatus?: boolean;
+}
+
+export interface QRData {
+  status: string;
+  /** Base64-encoded QR code image */
   qrCode?: string | null;
-  status: QRCodeResponseStatus;
 }
 
-export interface BotCommand {
-  id: number;
-  botId: number;
-  command: string;
-  /** @nullable */
-  description?: string | null;
-  response: string;
-  isEnabled: boolean;
-  createdAt: string;
-  updatedAt: string;
+export interface PairCodeBody {
+  /** Phone number with country code (e.g. +254712345678) */
+  phoneNumber: string;
 }
 
-export interface CreateBotCommandBody {
-  command: string;
-  /** @nullable */
-  description?: string | null;
-  response: string;
-  isEnabled?: boolean;
-}
-
-export interface UpdateBotCommandBody {
-  command?: string;
-  /** @nullable */
-  description?: string | null;
-  response?: string;
-  isEnabled?: boolean;
-}
-
-export interface DashboardStats {
-  totalBots: number;
-  activeBots: number;
-  onlineBots: number;
-  totalCommands: number;
+export interface PairCodeData {
+  /** 8-digit pairing code */
+  code: string;
 }
 
 export interface AdminLoginBody {
@@ -115,21 +100,8 @@ export interface AdminLoginBody {
   key: string;
 }
 
-export interface AdminLoginResponse {
+export interface AdminToken {
   token: string;
-  message: string;
-}
-
-export interface AdminBot {
-  id: number;
-  userId: string;
-  name: string;
-  status: string;
-  isActive: boolean;
-  /** @nullable */
-  phoneNumber?: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface AdminStats {
@@ -137,5 +109,4 @@ export interface AdminStats {
   totalBots: number;
   activeBots: number;
   onlineBots: number;
-  totalCommands: number;
 }

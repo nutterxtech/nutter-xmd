@@ -1,22 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
-import { db, botsTable, botCommandsTable } from "@workspace/db";
-import {
-  CreateBotBody,
-  UpdateBotBody,
-  GetBotParams,
-  UpdateBotParams,
-  DeleteBotParams,
-  GetBotQRParams,
-  DisconnectBotParams,
-  ListBotCommandsParams,
-  CreateBotCommandParams,
-  CreateBotCommandBody,
-  UpdateBotCommandParams,
-  UpdateBotCommandBody,
-  DeleteBotCommandParams,
-} from "@workspace/api-zod";
+import { db, botsTable } from "@workspace/db";
+import { UpdateMyBotBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -31,314 +17,106 @@ const requireAuth = (req: any, res: any, next: any) => {
   next();
 };
 
-router.get("/bots", requireAuth, async (req: any, res): Promise<void> => {
-  const bots = await db
+async function getOrCreateBot(userId: string) {
+  const existing = await db
     .select()
     .from(botsTable)
-    .where(eq(botsTable.userId, req.userId))
-    .orderBy(botsTable.createdAt);
-  res.json(bots);
-});
+    .where(eq(botsTable.userId, userId))
+    .limit(1);
 
-router.post("/bots", requireAuth, async (req: any, res): Promise<void> => {
-  const parsed = CreateBotBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (existing.length > 0) return existing[0];
 
   const [bot] = await db
     .insert(botsTable)
-    .values({
-      ...parsed.data,
-      userId: req.userId,
-      status: "offline",
-    })
+    .values({ userId, name: "My Bot", status: "offline" })
     .returning();
 
-  res.status(201).json(bot);
+  return bot;
+}
+
+// GET /api/bot — get (or auto-create) the user's single bot
+router.get("/bot", requireAuth, async (req: any, res): Promise<void> => {
+  try {
+    const bot = await getOrCreateBot(req.userId);
+    res.json(bot);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-router.get("/bots/:id", requireAuth, async (req: any, res): Promise<void> => {
-  const params = GetBotParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  res.json(bot);
-});
-
-router.patch("/bots/:id", requireAuth, async (req: any, res): Promise<void> => {
-  const params = UpdateBotParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const parsed = UpdateBotBody.safeParse(req.body);
+// PUT /api/bot — update bot settings
+router.put("/bot", requireAuth, async (req: any, res): Promise<void> => {
+  const parsed = UpdateMyBotBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const [bot] = await db
+  const bot = await getOrCreateBot(req.userId);
+
+  const [updated] = await db
     .update(botsTable)
-    .set(parsed.data)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)))
+    .set({ ...parsed.data })
+    .where(eq(botsTable.id, bot.id))
     .returning();
 
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  res.json(bot);
+  res.json(updated);
 });
 
-router.delete("/bots/:id", requireAuth, async (req: any, res): Promise<void> => {
-  const params = DeleteBotParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  await db
-    .delete(botCommandsTable)
-    .where(eq(botCommandsTable.botId, params.data.id));
-
-  const [bot] = await db
-    .delete(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)))
-    .returning();
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  res.sendStatus(204);
-});
-
-router.get("/bots/:id/qr", requireAuth, async (req: any, res): Promise<void> => {
-  const params = GetBotQRParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
+// GET /api/bot/qr — get QR code for WhatsApp connection
+router.get("/bot/qr", requireAuth, async (req: any, res): Promise<void> => {
+  const bot = await getOrCreateBot(req.userId);
 
   if (bot.status === "online") {
-    res.json({ status: "connected", qrCode: null });
+    res.json({ status: "online", qrCode: null });
     return;
   }
 
+  // Simulate QR code generation (placeholder — real Baileys integration would go here)
   await db
     .update(botsTable)
     .set({ status: "connecting" })
-    .where(eq(botsTable.id, params.data.id));
+    .where(eq(botsTable.id, bot.id));
 
   res.json({
-    status: "pending",
+    status: "connecting",
     qrCode: null,
+    message: "Scan QR with WhatsApp to connect",
   });
 });
 
-router.post("/bots/:id/disconnect", requireAuth, async (req: any, res): Promise<void> => {
-  const params = DisconnectBotParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+// POST /api/bot/pair — request pairing code
+router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
+  const { phoneNumber } = req.body;
+  if (!phoneNumber) {
+    res.status(400).json({ error: "phoneNumber is required" });
     return;
   }
 
-  const [bot] = await db
+  const bot = await getOrCreateBot(req.userId);
+
+  // Generate a mock pairing code (8 uppercase chars) — real impl would call Baileys
+  const code = Math.random().toString(36).toUpperCase().slice(2, 10);
+
+  await db
     .update(botsTable)
-    .set({ status: "offline", phoneNumber: null, sessionData: null })
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)))
+    .set({ status: "connecting", phoneNumber })
+    .where(eq(botsTable.id, bot.id));
+
+  res.json({ code });
+});
+
+// POST /api/bot/disconnect — disconnect bot
+router.post("/bot/disconnect", requireAuth, async (req: any, res): Promise<void> => {
+  const bot = await getOrCreateBot(req.userId);
+
+  const [updated] = await db
+    .update(botsTable)
+    .set({ status: "offline", phoneNumber: null })
+    .where(eq(botsTable.id, bot.id))
     .returning();
 
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  res.json(bot);
-});
-
-router.get("/bots/:id/commands", requireAuth, async (req: any, res): Promise<void> => {
-  const params = ListBotCommandsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  const commands = await db
-    .select()
-    .from(botCommandsTable)
-    .where(eq(botCommandsTable.botId, params.data.id))
-    .orderBy(botCommandsTable.createdAt);
-
-  res.json(commands);
-});
-
-router.post("/bots/:id/commands", requireAuth, async (req: any, res): Promise<void> => {
-  const params = CreateBotCommandParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const parsed = CreateBotCommandBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  const [command] = await db
-    .insert(botCommandsTable)
-    .values({
-      botId: params.data.id,
-      command: parsed.data.command,
-      description: parsed.data.description ?? null,
-      response: parsed.data.response,
-      isEnabled: parsed.data.isEnabled ?? true,
-    })
-    .returning();
-
-  res.status(201).json(command);
-});
-
-router.patch("/bots/:id/commands/:commandId", requireAuth, async (req: any, res): Promise<void> => {
-  const params = UpdateBotCommandParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const parsed = UpdateBotCommandBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  const [command] = await db
-    .update(botCommandsTable)
-    .set(parsed.data)
-    .where(and(eq(botCommandsTable.id, params.data.commandId), eq(botCommandsTable.botId, params.data.id)))
-    .returning();
-
-  if (!command) {
-    res.status(404).json({ error: "Command not found" });
-    return;
-  }
-
-  res.json(command);
-});
-
-router.delete("/bots/:id/commands/:commandId", requireAuth, async (req: any, res): Promise<void> => {
-  const params = DeleteBotCommandParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [bot] = await db
-    .select()
-    .from(botsTable)
-    .where(and(eq(botsTable.id, params.data.id), eq(botsTable.userId, req.userId)));
-
-  if (!bot) {
-    res.status(404).json({ error: "Bot not found" });
-    return;
-  }
-
-  const [command] = await db
-    .delete(botCommandsTable)
-    .where(and(eq(botCommandsTable.id, params.data.commandId), eq(botCommandsTable.botId, params.data.id)))
-    .returning();
-
-  if (!command) {
-    res.status(404).json({ error: "Command not found" });
-    return;
-  }
-
-  res.sendStatus(204);
-});
-
-router.get("/dashboard/stats", requireAuth, async (req: any, res): Promise<void> => {
-  const bots = await db
-    .select()
-    .from(botsTable)
-    .where(eq(botsTable.userId, req.userId));
-
-  const totalBots = bots.length;
-  const activeBots = bots.filter((b) => b.isActive).length;
-  const onlineBots = bots.filter((b) => b.status === "online").length;
-
-  const botIds = bots.map((b) => b.id);
-  let totalCommands = 0;
-  if (botIds.length > 0) {
-    const commandRows = await db
-      .select({ count: count() })
-      .from(botCommandsTable)
-      .where(
-        botIds.length === 1
-          ? eq(botCommandsTable.botId, botIds[0])
-          : eq(botCommandsTable.botId, botIds[0])
-      );
-    totalCommands = commandRows[0]?.count ?? 0;
-  }
-
-  res.json({ totalBots, activeBots, onlineBots, totalCommands });
+  res.json(updated);
 });
 
 export default router;

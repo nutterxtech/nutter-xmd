@@ -8,8 +8,6 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import DashboardLayout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
-import BotList from "@/pages/BotList";
-import BotDetail from "@/pages/BotDetail";
 import AdminDashboard from "@/pages/Admin";
 
 const queryClient = new QueryClient();
@@ -31,7 +29,7 @@ if (!clerkPubKey) {
 function SignInPage() {
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-center opacity-10 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
       <div className="relative z-10 w-full max-w-md">
         <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
       </div>
@@ -42,7 +40,7 @@ function SignInPage() {
 function SignUpPage() {
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[url('/hero-bg.png')] bg-cover bg-center opacity-10 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
       <div className="relative z-10 w-full max-w-md">
         <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
       </div>
@@ -109,7 +107,7 @@ function ClerkProviderWithRoutes() {
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
       appearance={{
         variables: {
-          colorPrimary: "#00ff66", // Neon green to match our theme
+          colorPrimary: "#00ff66",
           colorBackground: "#0a0a0a",
           colorText: "#ffffff",
           colorInputBackground: "#1a1a1a",
@@ -123,27 +121,15 @@ function ClerkProviderWithRoutes() {
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
-          
+
           <Route path="/dashboard">
             <DashboardLayout>
               <ProtectedRoute component={Dashboard} />
             </DashboardLayout>
           </Route>
-          
-          <Route path="/dashboard/bots">
-            <DashboardLayout>
-              <ProtectedRoute component={BotList} />
-            </DashboardLayout>
-          </Route>
-
-          <Route path="/dashboard/bots/:id">
-            <DashboardLayout>
-              <ProtectedRoute component={BotDetail} />
-            </DashboardLayout>
-          </Route>
 
           <Route path="/admin" component={AdminDashboard} />
-          
+
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>

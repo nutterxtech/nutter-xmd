@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
+  version: 0.2.0
   description: NUTTER-XMD SaaS platform API
 servers:
   - url: /api
@@ -10,10 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
-  - name: bots
-    description: WhatsApp bot management
-  - name: commands
-    description: Bot command management
+  - name: bot
+    description: WhatsApp bot (one per user)
   - name: admin
     description: Admin operations
 paths:
@@ -22,7 +20,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -31,35 +28,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
-  /bots:
+  /bot:
     get:
-      operationId: listBots
-      tags: [bots]
-      summary: List all bots for authenticated user
+      operationId: getMyBot
+      tags: [bot]
+      summary: Get the current user's bot (auto-creates if not exists)
       responses:
         "200":
-          description: List of bots
+          description: Bot object
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Bot"
+                $ref: "#/components/schemas/Bot"
         "401":
           description: Unauthorized
-    post:
-      operationId: createBot
-      tags: [bots]
-      summary: Create a new bot
+    put:
+      operationId: updateMyBot
+      tags: [bot]
+      summary: Update the current user's bot settings
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateBotBody"
+              $ref: "#/components/schemas/UpdateBotBody"
       responses:
-        "201":
-          description: Bot created
+        "200":
+          description: Updated bot
           content:
             application/json:
               schema:
@@ -69,99 +64,49 @@ paths:
         "401":
           description: Unauthorized
 
-  /bots/{id}:
-    get:
-      operationId: getBot
-      tags: [bots]
-      summary: Get a bot by ID
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Bot details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Bot"
-        "404":
-          description: Not found
-    patch:
-      operationId: updateBot
-      tags: [bots]
-      summary: Update a bot
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateBotBody"
-      responses:
-        "200":
-          description: Bot updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Bot"
-        "404":
-          description: Not found
-    delete:
-      operationId: deleteBot
-      tags: [bots]
-      summary: Delete a bot
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
-        "404":
-          description: Not found
-
-  /bots/{id}/qr:
+  /bot/qr:
     get:
       operationId: getBotQR
-      tags: [bots]
-      summary: Get QR code for bot WhatsApp connection
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+      tags: [bot]
+      summary: Get QR code for WhatsApp connection
       responses:
         "200":
           description: QR code data
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/QRCodeResponse"
-        "404":
-          description: Not found
+                $ref: "#/components/schemas/QRData"
+        "401":
+          description: Unauthorized
 
-  /bots/{id}/disconnect:
+  /bot/pair:
+    post:
+      operationId: getBotPairCode
+      tags: [bot]
+      summary: Request a pairing code for phone number link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairCodeBody"
+      responses:
+        "200":
+          description: Pairing code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairCodeData"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+
+  /bot/disconnect:
     post:
       operationId: disconnectBot
-      tags: [bots]
-      summary: Disconnect bot from WhatsApp
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
+      tags: [bot]
+      summary: Disconnect the bot from WhatsApp
       responses:
         "200":
           description: Disconnected
@@ -169,111 +114,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Bot"
-
-  /bots/{id}/commands:
-    get:
-      operationId: listBotCommands
-      tags: [commands]
-      summary: List commands for a bot
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: List of commands
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/BotCommand"
-    post:
-      operationId: createBotCommand
-      tags: [commands]
-      summary: Create a command for a bot
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateBotCommandBody"
-      responses:
-        "201":
-          description: Command created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BotCommand"
-
-  /bots/{id}/commands/{commandId}:
-    patch:
-      operationId: updateBotCommand
-      tags: [commands]
-      summary: Update a bot command
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: commandId
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateBotCommandBody"
-      responses:
-        "200":
-          description: Command updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BotCommand"
-    delete:
-      operationId: deleteBotCommand
-      tags: [commands]
-      summary: Delete a bot command
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-        - name: commandId
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Deleted
-
-  /dashboard/stats:
-    get:
-      operationId: getDashboardStats
-      tags: [bots]
-      summary: Get dashboard statistics for the current user
-      responses:
-        "200":
-          description: Dashboard stats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DashboardStats"
+        "401":
+          description: Unauthorized
 
   /admin/login:
     post:
@@ -288,19 +130,19 @@ paths:
               $ref: "#/components/schemas/AdminLoginBody"
       responses:
         "200":
-          description: Admin login success
+          description: Admin token
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdminLoginResponse"
+                $ref: "#/components/schemas/AdminToken"
         "401":
-          description: Invalid credentials
+          description: Unauthorized
 
   /admin/bots:
     get:
       operationId: adminListAllBots
       tags: [admin]
-      summary: Admin - list all bots across all users
+      summary: List all bots on the platform
       responses:
         "200":
           description: All bots
@@ -309,7 +151,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/AdminBot"
+                  $ref: "#/components/schemas/Bot"
         "401":
           description: Unauthorized
 
@@ -317,7 +159,7 @@ paths:
     post:
       operationId: adminActivateBot
       tags: [admin]
-      summary: Admin - activate a bot
+      summary: Activate a bot
       parameters:
         - name: id
           in: path
@@ -326,17 +168,21 @@ paths:
             type: integer
       responses:
         "200":
-          description: Bot activated
+          description: Activated bot
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdminBot"
+                $ref: "#/components/schemas/Bot"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
 
   /admin/bots/{id}/deactivate:
     post:
       operationId: adminDeactivateBot
       tags: [admin]
-      summary: Admin - deactivate a bot
+      summary: Deactivate a bot
       parameters:
         - name: id
           in: path
@@ -345,17 +191,21 @@ paths:
             type: integer
       responses:
         "200":
-          description: Bot deactivated
+          description: Deactivated bot
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdminBot"
+                $ref: "#/components/schemas/Bot"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
 
   /admin/stats:
     get:
       operationId: adminGetStats
       tags: [admin]
-      summary: Admin - platform-wide statistics
+      summary: Get platform stats
       responses:
         "200":
           description: Platform stats
@@ -363,19 +213,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminStats"
+        "401":
+          description: Unauthorized
 
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
     Bot:
       type: object
+      required:
+        - id
+        - userId
+        - name
+        - status
+        - isActive
+        - prefix
+        - mode
+        - autoReply
+        - antiCall
+        - antiLink
+        - antiSpam
+        - welcomeMessage
+        - goodbyeMessage
+        - autoRead
+        - typingStatus
+        - alwaysOnline
+        - autoStatus
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -383,206 +254,131 @@ components:
           type: string
         name:
           type: string
-        description:
-          type: ["string", "null"]
         status:
           type: string
-          enum: [offline, connecting, online, banned]
+          enum: [online, offline, connecting, banned]
         isActive:
           type: boolean
         phoneNumber:
-          type: ["string", "null"]
-        sessionData:
-          type: ["string", "null"]
+          type: string
+          nullable: true
+        prefix:
+          type: string
+        mode:
+          type: string
+          enum: [private, public]
         autoReply:
           type: boolean
         autoReplyMessage:
-          type: ["string", "null"]
-        prefix:
           type: string
+          nullable: true
+        antiCall:
+          type: boolean
+        antiLink:
+          type: boolean
+        antiSpam:
+          type: boolean
+        welcomeMessage:
+          type: boolean
+        goodbyeMessage:
+          type: boolean
+        autoRead:
+          type: boolean
+        typingStatus:
+          type: boolean
+        alwaysOnline:
+          type: boolean
+        autoStatus:
+          type: boolean
         createdAt:
           type: string
+          format: date-time
         updatedAt:
           type: string
-      required:
-        - id
-        - userId
-        - name
-        - status
-        - isActive
-        - autoReply
-        - prefix
-        - createdAt
-        - updatedAt
-
-    CreateBotBody:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: ["string", "null"]
-        prefix:
-          type: string
-        autoReply:
-          type: boolean
-        autoReplyMessage:
-          type: ["string", "null"]
-      required:
-        - name
-        - prefix
+          format: date-time
 
     UpdateBotBody:
       type: object
       properties:
         name:
           type: string
-        description:
-          type: ["string", "null"]
+          minLength: 1
         prefix:
           type: string
+          minLength: 1
+          maxLength: 5
+        mode:
+          type: string
+          enum: [private, public]
         autoReply:
           type: boolean
         autoReplyMessage:
-          type: ["string", "null"]
-        isActive:
+          type: string
+        antiCall:
+          type: boolean
+        antiLink:
+          type: boolean
+        antiSpam:
+          type: boolean
+        welcomeMessage:
+          type: boolean
+        goodbyeMessage:
+          type: boolean
+        autoRead:
+          type: boolean
+        typingStatus:
+          type: boolean
+        alwaysOnline:
+          type: boolean
+        autoStatus:
           type: boolean
 
-    QRCodeResponse:
+    QRData:
       type: object
+      required: [status]
       properties:
-        qrCode:
-          type: ["string", "null"]
         status:
           type: string
-          enum: [pending, ready, connected, error]
-      required:
-        - status
+        qrCode:
+          type: string
+          nullable: true
+          description: Base64-encoded QR code image
 
-    BotCommand:
+    PairCodeBody:
       type: object
+      required: [phoneNumber]
       properties:
-        id:
-          type: integer
-        botId:
-          type: integer
-        command:
+        phoneNumber:
           type: string
-        description:
-          type: ["string", "null"]
-        response:
-          type: string
-        isEnabled:
-          type: boolean
-        createdAt:
-          type: string
-        updatedAt:
-          type: string
-      required:
-        - id
-        - botId
-        - command
-        - response
-        - isEnabled
-        - createdAt
-        - updatedAt
+          description: Phone number with country code (e.g. +254712345678)
 
-    CreateBotCommandBody:
+    PairCodeData:
       type: object
+      required: [code]
       properties:
-        command:
+        code:
           type: string
-        description:
-          type: ["string", "null"]
-        response:
-          type: string
-        isEnabled:
-          type: boolean
-      required:
-        - command
-        - response
-
-    UpdateBotCommandBody:
-      type: object
-      properties:
-        command:
-          type: string
-        description:
-          type: ["string", "null"]
-        response:
-          type: string
-        isEnabled:
-          type: boolean
-
-    DashboardStats:
-      type: object
-      properties:
-        totalBots:
-          type: integer
-        activeBots:
-          type: integer
-        onlineBots:
-          type: integer
-        totalCommands:
-          type: integer
-      required:
-        - totalBots
-        - activeBots
-        - onlineBots
-        - totalCommands
+          description: 8-digit pairing code
 
     AdminLoginBody:
       type: object
+      required: [username, key]
       properties:
         username:
           type: string
         key:
           type: string
-      required:
-        - username
-        - key
 
-    AdminLoginResponse:
+    AdminToken:
       type: object
+      required: [token]
       properties:
         token:
           type: string
-        message:
-          type: string
-      required:
-        - token
-        - message
-
-    AdminBot:
-      type: object
-      properties:
-        id:
-          type: integer
-        userId:
-          type: string
-        name:
-          type: string
-        status:
-          type: string
-        isActive:
-          type: boolean
-        phoneNumber:
-          type: ["string", "null"]
-        createdAt:
-          type: string
-        updatedAt:
-          type: string
-      required:
-        - id
-        - userId
-        - name
-        - status
-        - isActive
-        - createdAt
-        - updatedAt
 
     AdminStats:
       type: object
+      required: [totalUsers, totalBots, activeBots, onlineBots]
       properties:
         totalUsers:
           type: integer
@@ -592,11 +388,3 @@ components:
           type: integer
         onlineBots:
           type: integer
-        totalCommands:
-          type: integer
-      required:
-        - totalUsers
-        - totalBots
-        - activeBots
-        - onlineBots
-        - totalCommands

@@ -3,12 +3,11 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,208 +15,125 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * @summary List all bots for authenticated user
+ * @summary Get the current user's bot (auto-creates if not exists)
  */
-export const ListBotsResponseItem = zod.object({
+export const GetMyBotResponse = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  description: zod.string().nullish(),
-  status: zod.enum(["offline", "connecting", "online", "banned"]),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  sessionData: zod.string().nullish(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
   autoReply: zod.boolean(),
   autoReplyMessage: zod.string().nullish(),
-  prefix: zod.string(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
-export const ListBotsResponse = zod.array(ListBotsResponseItem);
 
 /**
- * @summary Create a new bot
+ * @summary Update the current user's bot settings
  */
-export const CreateBotBody = zod.object({
-  name: zod.string(),
-  description: zod.string().nullish(),
-  prefix: zod.string(),
+
+export const updateMyBotBodyPrefixMax = 5;
+
+export const UpdateMyBotBody = zod.object({
+  name: zod.string().min(1).optional(),
+  prefix: zod.string().min(1).max(updateMyBotBodyPrefixMax).optional(),
+  mode: zod.enum(["private", "public"]).optional(),
   autoReply: zod.boolean().optional(),
-  autoReplyMessage: zod.string().nullish(),
+  autoReplyMessage: zod.string().optional(),
+  antiCall: zod.boolean().optional(),
+  antiLink: zod.boolean().optional(),
+  antiSpam: zod.boolean().optional(),
+  welcomeMessage: zod.boolean().optional(),
+  goodbyeMessage: zod.boolean().optional(),
+  autoRead: zod.boolean().optional(),
+  typingStatus: zod.boolean().optional(),
+  alwaysOnline: zod.boolean().optional(),
+  autoStatus: zod.boolean().optional(),
 });
 
-/**
- * @summary Get a bot by ID
- */
-export const GetBotParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const GetBotResponse = zod.object({
+export const UpdateMyBotResponse = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  description: zod.string().nullish(),
-  status: zod.enum(["offline", "connecting", "online", "banned"]),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  sessionData: zod.string().nullish(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
   autoReply: zod.boolean(),
   autoReplyMessage: zod.string().nullish(),
-  prefix: zod.string(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
- * @summary Update a bot
+ * @summary Get QR code for WhatsApp connection
  */
-export const UpdateBotParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const UpdateBotBody = zod.object({
-  name: zod.string().optional(),
-  description: zod.string().nullish(),
-  prefix: zod.string().optional(),
-  autoReply: zod.boolean().optional(),
-  autoReplyMessage: zod.string().nullish(),
-  isActive: zod.boolean().optional(),
-});
-
-export const UpdateBotResponse = zod.object({
-  id: zod.number(),
-  userId: zod.string(),
-  name: zod.string(),
-  description: zod.string().nullish(),
-  status: zod.enum(["offline", "connecting", "online", "banned"]),
-  isActive: zod.boolean(),
-  phoneNumber: zod.string().nullish(),
-  sessionData: zod.string().nullish(),
-  autoReply: zod.boolean(),
-  autoReplyMessage: zod.string().nullish(),
-  prefix: zod.string(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
-
-/**
- * @summary Delete a bot
- */
-export const DeleteBotParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-/**
- * @summary Get QR code for bot WhatsApp connection
- */
-export const GetBotQRParams = zod.object({
-  id: zod.coerce.number(),
-});
-
 export const GetBotQRResponse = zod.object({
-  qrCode: zod.string().nullish(),
-  status: zod.enum(["pending", "ready", "connected", "error"]),
+  status: zod.string(),
+  qrCode: zod.string().nullish().describe("Base64-encoded QR code image"),
 });
 
 /**
- * @summary Disconnect bot from WhatsApp
+ * @summary Request a pairing code for phone number link
  */
-export const DisconnectBotParams = zod.object({
-  id: zod.coerce.number(),
+export const GetBotPairCodeBody = zod.object({
+  phoneNumber: zod
+    .string()
+    .describe("Phone number with country code (e.g. +254712345678)"),
 });
 
+export const GetBotPairCodeResponse = zod.object({
+  code: zod.string().describe("8-digit pairing code"),
+});
+
+/**
+ * @summary Disconnect the bot from WhatsApp
+ */
 export const DisconnectBotResponse = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  description: zod.string().nullish(),
-  status: zod.enum(["offline", "connecting", "online", "banned"]),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  sessionData: zod.string().nullish(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
   autoReply: zod.boolean(),
   autoReplyMessage: zod.string().nullish(),
-  prefix: zod.string(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
-
-/**
- * @summary List commands for a bot
- */
-export const ListBotCommandsParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const ListBotCommandsResponseItem = zod.object({
-  id: zod.number(),
-  botId: zod.number(),
-  command: zod.string(),
-  description: zod.string().nullish(),
-  response: zod.string(),
-  isEnabled: zod.boolean(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
-export const ListBotCommandsResponse = zod.array(ListBotCommandsResponseItem);
-
-/**
- * @summary Create a command for a bot
- */
-export const CreateBotCommandParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const CreateBotCommandBody = zod.object({
-  command: zod.string(),
-  description: zod.string().nullish(),
-  response: zod.string(),
-  isEnabled: zod.boolean().optional(),
-});
-
-/**
- * @summary Update a bot command
- */
-export const UpdateBotCommandParams = zod.object({
-  id: zod.coerce.number(),
-  commandId: zod.coerce.number(),
-});
-
-export const UpdateBotCommandBody = zod.object({
-  command: zod.string().optional(),
-  description: zod.string().nullish(),
-  response: zod.string().optional(),
-  isEnabled: zod.boolean().optional(),
-});
-
-export const UpdateBotCommandResponse = zod.object({
-  id: zod.number(),
-  botId: zod.number(),
-  command: zod.string(),
-  description: zod.string().nullish(),
-  response: zod.string(),
-  isEnabled: zod.boolean(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
-
-/**
- * @summary Delete a bot command
- */
-export const DeleteBotCommandParams = zod.object({
-  id: zod.coerce.number(),
-  commandId: zod.coerce.number(),
-});
-
-/**
- * @summary Get dashboard statistics for the current user
- */
-export const GetDashboardStatsResponse = zod.object({
-  totalBots: zod.number(),
-  activeBots: zod.number(),
-  onlineBots: zod.number(),
-  totalCommands: zod.number(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
@@ -230,26 +146,38 @@ export const AdminLoginBody = zod.object({
 
 export const AdminLoginResponse = zod.object({
   token: zod.string(),
-  message: zod.string(),
 });
 
 /**
- * @summary Admin - list all bots across all users
+ * @summary List all bots on the platform
  */
 export const AdminListAllBotsResponseItem = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  status: zod.string(),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
+  autoReply: zod.boolean(),
+  autoReplyMessage: zod.string().nullish(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 export const AdminListAllBotsResponse = zod.array(AdminListAllBotsResponseItem);
 
 /**
- * @summary Admin - activate a bot
+ * @summary Activate a bot
  */
 export const AdminActivateBotParams = zod.object({
   id: zod.coerce.number(),
@@ -259,15 +187,28 @@ export const AdminActivateBotResponse = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  status: zod.string(),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
+  autoReply: zod.boolean(),
+  autoReplyMessage: zod.string().nullish(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
- * @summary Admin - deactivate a bot
+ * @summary Deactivate a bot
  */
 export const AdminDeactivateBotParams = zod.object({
   id: zod.coerce.number(),
@@ -277,20 +218,32 @@ export const AdminDeactivateBotResponse = zod.object({
   id: zod.number(),
   userId: zod.string(),
   name: zod.string(),
-  status: zod.string(),
+  status: zod.enum(["online", "offline", "connecting", "banned"]),
   isActive: zod.boolean(),
   phoneNumber: zod.string().nullish(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
+  prefix: zod.string(),
+  mode: zod.enum(["private", "public"]),
+  autoReply: zod.boolean(),
+  autoReplyMessage: zod.string().nullish(),
+  antiCall: zod.boolean(),
+  antiLink: zod.boolean(),
+  antiSpam: zod.boolean(),
+  welcomeMessage: zod.boolean(),
+  goodbyeMessage: zod.boolean(),
+  autoRead: zod.boolean(),
+  typingStatus: zod.boolean(),
+  alwaysOnline: zod.boolean(),
+  autoStatus: zod.boolean(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**
- * @summary Admin - platform-wide statistics
+ * @summary Get platform stats
  */
 export const AdminGetStatsResponse = zod.object({
   totalUsers: zod.number(),
   totalBots: zod.number(),
   activeBots: zod.number(),
   onlineBots: zod.number(),
-  totalCommands: zod.number(),
 });

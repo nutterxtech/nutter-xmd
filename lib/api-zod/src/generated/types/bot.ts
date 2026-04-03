@@ -3,26 +3,31 @@
  * Do not edit manually.
  * Api
  * NUTTER-XMD SaaS platform API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { BotMode } from "./botMode";
 import type { BotStatus } from "./botStatus";
 
 export interface Bot {
   id: number;
   userId: string;
   name: string;
-  /** @nullable */
-  description?: string | null;
   status: BotStatus;
   isActive: boolean;
-  /** @nullable */
   phoneNumber?: string | null;
-  /** @nullable */
-  sessionData?: string | null;
-  autoReply: boolean;
-  /** @nullable */
-  autoReplyMessage?: string | null;
   prefix: string;
-  createdAt: string;
-  updatedAt: string;
+  mode: BotMode;
+  autoReply: boolean;
+  autoReplyMessage?: string | null;
+  antiCall: boolean;
+  antiLink: boolean;
+  antiSpam: boolean;
+  welcomeMessage: boolean;
+  goodbyeMessage: boolean;
+  autoRead: boolean;
+  typingStatus: boolean;
+  alwaysOnline: boolean;
+  autoStatus: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }

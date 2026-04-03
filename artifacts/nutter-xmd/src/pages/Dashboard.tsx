@@ -1,166 +1,480 @@
-import { useGetDashboardStats } from "@workspace/api-client-react";
+import { useState } from "react";
+import {
+  useGetMyBot,
+  useUpdateMyBot,
+  useGetBotQR,
+  useGetBotPairCode,
+  useDisconnectBot,
+  getGetMyBotQueryKey,
+  getGetBotQRQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Activity, Bot, Zap, Command, Plus, ServerCrash } from "lucide-react";
+import {
+  Wifi,
+  WifiOff,
+  QrCode,
+  Smartphone,
+  RefreshCw,
+  Loader2,
+  Shield,
+  Globe,
+  Lock,
+  Phone,
+  MessageSquare,
+  BellOff,
+  Link2Off,
+  UserCheck,
+  EyeOff,
+  Activity,
+  Radio,
+  Clock,
+  Users,
+  LogOut,
+  Save,
+  AlertTriangle,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
+
+type FeatureToggle = {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ComponentType<any>;
+  category: string;
+};
+
+const FEATURE_TOGGLES: FeatureToggle[] = [
+  { key: "antiCall",       label: "Anti-Call",        description: "Block and reject incoming voice calls",        icon: BellOff,     category: "Protection" },
+  { key: "antiLink",       label: "Anti-Link",        description: "Auto-delete links posted in groups",           icon: Link2Off,    category: "Protection" },
+  { key: "antiSpam",       label: "Anti-Spam",        description: "Automatically remove spam messages",           icon: Shield,      category: "Protection" },
+  { key: "welcomeMessage", label: "Welcome Message",  description: "Greet new members joining groups",             icon: UserCheck,   category: "Group" },
+  { key: "goodbyeMessage", label: "Goodbye Message",  description: "Send farewell when members leave groups",      icon: LogOut,      category: "Group" },
+  { key: "autoReply",      label: "Auto-Reply",       description: "Automatically respond to all messages",        icon: MessageSquare, category: "Automation" },
+  { key: "autoRead",       label: "Auto-Read",        description: "Mark all incoming messages as read",           icon: EyeOff,      category: "Automation" },
+  { key: "typingStatus",   label: "Typing Indicator", description: "Show typing status while processing",          icon: Clock,       category: "Presence" },
+  { key: "alwaysOnline",   label: "Always Online",    description: "Keep status as online at all times",           icon: Activity,    category: "Presence" },
+  { key: "autoStatus",     label: "Auto-View Status", description: "Automatically view all contacts' statuses",    icon: Radio,       category: "Presence" },
+];
+
+const CATEGORIES = ["Protection", "Group", "Automation", "Presence"];
 
 export default function Dashboard() {
-  const { data: stats, isLoading, isError, refetch } = useGetDashboardStats();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  if (isError) {
+  const { data: bot, isLoading } = useGetMyBot();
+  const { data: qrData, isLoading: qrLoading, refetch: refetchQR } = useGetBotQR({
+    query: { enabled: false },
+  });
+
+  const updateBot = useUpdateMyBot();
+  const getBotPairCode = useGetBotPairCode();
+  const disconnectBot = useDisconnectBot();
+
+  const [pairPhone, setPairPhone] = useState("");
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [showPairInput, setShowPairInput] = useState(false);
+  const [autoReplyMsg, setAutoReplyMsg] = useState("");
+
+  const handleToggleFeature = (key: string, value: boolean) => {
+    updateBot.mutate(
+      { data: { [key]: value } as any },
+      {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() }),
+        onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleToggleMode = (mode: "private" | "public") => {
+    updateBot.mutate(
+      { data: { mode } },
+      {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() }),
+        onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleGenerateQR = async () => {
+    await refetchQR();
+  };
+
+  const handleRequestPairCode = () => {
+    if (!pairPhone.trim()) return;
+    getBotPairCode.mutate(
+      { data: { phoneNumber: pairPhone } },
+      {
+        onSuccess: (data) => {
+          setPairCode(data.code);
+          queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
+          toast({ title: "Pairing code generated", description: "Enter this code in WhatsApp" });
+        },
+        onError: () => toast({ title: "Failed to generate code", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleDisconnect = () => {
+    disconnectBot.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetBotQRQueryKey() });
+        setPairCode(null);
+        setPairPhone("");
+        toast({ title: "Bot disconnected" });
+      },
+      onError: () => toast({ title: "Error", variant: "destructive" }),
+    });
+  };
+
+  const handleSaveAutoReply = () => {
+    updateBot.mutate(
+      { data: { autoReplyMessage: autoReplyMsg } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
+          toast({ title: "Auto-reply message saved" });
+        },
+        onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+      }
+    );
+  };
+
+  if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">System Overview</h1>
-        <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
-          <ServerCrash className="h-4 w-4" />
-          <AlertTitle>Connection Error</AlertTitle>
-          <AlertDescription className="flex items-center gap-4">
-            Failed to retrieve telemetry data from master node.
-            <Button variant="outline" size="sm" onClick={() => refetch()}>Retry Connection</Button>
-          </AlertDescription>
-        </Alert>
+        <Skeleton className="h-48 w-full rounded-xl bg-muted/30" />
+        <Skeleton className="h-96 w-full rounded-xl bg-muted/30" />
       </div>
     );
   }
 
+  const isOnline = bot?.status === "online";
+  const isConnecting = bot?.status === "connecting";
+  const isSuspended = bot && !bot.isActive;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight glow-text">System Overview</h1>
-          <p className="text-muted-foreground mt-1">Real-time telemetry for your bot infrastructure.</p>
-        </div>
-        <Link href="/dashboard/bots">
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 glow-border">
-            <Plus className="w-4 h-4 mr-2" />
-            Deploy New Bot
-          </Button>
-        </Link>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard 
-          title="Total Instances" 
-          value={stats?.totalBots} 
-          icon={Bot} 
-          isLoading={isLoading} 
-        />
-        <StatsCard 
-          title="Active Instances" 
-          value={stats?.activeBots} 
-          icon={Activity} 
-          isLoading={isLoading} 
-          color="text-blue-500"
-        />
-        <StatsCard 
-          title="Online / Connected" 
-          value={stats?.onlineBots} 
-          icon={Zap} 
-          isLoading={isLoading} 
-          color="text-primary"
-          pulse
-        />
-        <StatsCard 
-          title="Total Commands" 
-          value={stats?.totalCommands} 
-          icon={Command} 
-          isLoading={isLoading} 
-          color="text-purple-500"
-        />
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="bg-card/50 border-border/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Master Node</span>
-                <span className="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/30 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                  OPERATIONAL
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Database Cluster</span>
-                <span className="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/30 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                  OPERATIONAL
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">WhatsApp Gateway</span>
-                <span className="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/30 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                  OPERATIONAL
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50 border-border/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <Link href="/dashboard/bots">
-              <Button variant="outline" className="w-full h-24 flex flex-col items-center justify-center gap-2 border-border/50 hover:border-primary/50 hover:bg-primary/5">
-                <Bot className="w-6 h-6 text-muted-foreground" />
-                <span>Manage Bots</span>
-              </Button>
-            </Link>
-            <Link href="/dashboard/bots?create=true">
-              <Button variant="outline" className="w-full h-24 flex flex-col items-center justify-center gap-2 border-border/50 hover:border-primary/50 hover:bg-primary/5">
-                <Plus className="w-6 h-6 text-muted-foreground" />
-                <span>New Bot</span>
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function StatsCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  isLoading,
-  color = "text-muted-foreground",
-  pulse = false
-}: { 
-  title: string; 
-  value?: number; 
-  icon: any; 
-  isLoading: boolean;
-  color?: string;
-  pulse?: boolean;
-}) {
-  return (
-    <Card className="bg-card border-border/50 relative overflow-hidden group hover:border-primary/30 transition-colors">
-      <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 group-hover:bg-primary/50 transition-colors" />
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <Icon className={`h-4 w-4 ${color} ${pulse ? 'animate-pulse-glow' : ''}`} />
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <Skeleton className="h-8 w-16 bg-muted/50" />
-        ) : (
-          <div className="text-3xl font-bold font-mono text-foreground">
-            {value !== undefined ? value : "-"}
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl mx-auto">
+      {/* Hero / Status Banner */}
+      <div className="relative rounded-xl border border-border/50 bg-card/80 overflow-hidden p-6">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          {/* Status indicator circle */}
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center border-2 shrink-0 ${
+            isOnline ? "border-primary bg-primary/10" :
+            isConnecting ? "border-yellow-400 bg-yellow-400/10" :
+            "border-border bg-secondary/30"
+          }`}>
+            {isOnline ? (
+              <Wifi className="w-7 h-7 text-primary" />
+            ) : isConnecting ? (
+              <Loader2 className="w-7 h-7 text-yellow-400 animate-spin" />
+            ) : (
+              <WifiOff className="w-7 h-7 text-muted-foreground" />
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold font-mono glow-text">{bot?.name ?? "My Bot"}</h1>
+              <span className={`text-xs px-2 py-0.5 rounded border font-mono flex items-center gap-1.5 ${
+                isOnline ? "bg-primary/20 text-primary border-primary/30" :
+                isConnecting ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" :
+                isSuspended ? "bg-destructive/20 text-destructive border-destructive/30" :
+                "bg-muted/50 text-muted-foreground border-border"
+              }`}>
+                {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
+                {isConnecting && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />}
+                {isOnline ? "ONLINE" : isConnecting ? "CONNECTING" : isSuspended ? "SUSPENDED" : "OFFLINE"}
+              </span>
+            </div>
+
+            {bot?.phoneNumber ? (
+              <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+                <Phone className="w-3.5 h-3.5" />
+                <span className="font-mono">{bot.phoneNumber}</span>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">Not connected to WhatsApp</p>
+            )}
+
+            {isSuspended && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-destructive">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Your bot has been suspended by an admin.
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-1 rounded font-mono border ${
+              bot?.mode === "private"
+                ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+            }`}>
+              {bot?.mode === "private" ? (
+                <><Lock className="w-3 h-3 inline mr-1" />PRIVATE</>
+              ) : (
+                <><Globe className="w-3 h-3 inline mr-1" />PUBLIC</>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs: Status | Settings */}
+      <Tabs defaultValue="status">
+        <TabsList className="w-full grid grid-cols-2 bg-secondary/50">
+          <TabsTrigger value="status" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+            <Wifi className="w-4 h-4 mr-2" />
+            Status
+          </TabsTrigger>
+          <TabsTrigger value="settings" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+            <Shield className="w-4 h-4 mr-2" />
+            Settings
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ─── STATUS TAB ─── */}
+        <TabsContent value="status" className="mt-4 space-y-4">
+          {isOnline ? (
+            // Connected state
+            <Card className="bg-card/50 border-border/50">
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-lg">
+                  <Wifi className="w-6 h-6 text-primary shrink-0" />
+                  <div>
+                    <p className="font-medium text-primary">WhatsApp Connected</p>
+                    <p className="text-sm text-muted-foreground">{bot?.phoneNumber}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
+                  onClick={handleDisconnect}
+                  disabled={disconnectBot.isPending}
+                  data-testid="button-disconnect"
+                >
+                  {disconnectBot.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <WifiOff className="w-4 h-4 mr-2" />}
+                  Disconnect WhatsApp
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            // Disconnected state
+            <div className="space-y-4">
+              {/* QR Code section */}
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <QrCode className="w-5 h-5 text-primary" />
+                    Scan QR Code
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">Open WhatsApp → Linked Devices → Link a Device, then scan this code.</p>
+                  <div className="flex items-center justify-center h-52 bg-secondary/30 border border-border/50 rounded-lg">
+                    {qrLoading ? (
+                      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                    ) : qrData?.qrCode ? (
+                      <img
+                        src={`data:image/png;base64,${qrData.qrCode}`}
+                        alt="WhatsApp QR Code"
+                        className="w-44 h-44 object-contain"
+                        data-testid="img-qr-code"
+                      />
+                    ) : (
+                      <div className="text-center px-6">
+                        <QrCode className="w-14 h-14 text-muted-foreground/20 mb-3 mx-auto" />
+                        <p className="text-sm text-muted-foreground">Click the button below to generate your QR code</p>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    onClick={handleGenerateQR}
+                    disabled={qrLoading}
+                    data-testid="button-generate-qr"
+                  >
+                    {qrLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                    {qrData ? "Refresh QR Code" : "Generate QR Code"}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Divider */}
+              <div className="flex items-center gap-4 text-muted-foreground text-xs">
+                <div className="flex-1 h-px bg-border/50" />
+                <span>OR use a pairing code</span>
+                <div className="flex-1 h-px bg-border/50" />
+              </div>
+
+              {/* Pairing Code section */}
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-primary" />
+                    Phone Pairing Code
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">Enter your phone number to receive a pairing code. Open WhatsApp → Linked Devices → Link with phone number.</p>
+
+                  {!showPairInput ? (
+                    <Button
+                      variant="outline"
+                      className="w-full border-border/50 hover:border-primary/50 hover:bg-primary/5"
+                      onClick={() => setShowPairInput(true)}
+                      data-testid="button-use-pairing"
+                    >
+                      <Phone className="w-4 h-4 mr-2" />
+                      Enter Phone Number
+                    </Button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Input
+                          data-testid="input-phone-number"
+                          placeholder="+254712345678"
+                          value={pairPhone}
+                          onChange={(e) => setPairPhone(e.target.value)}
+                          className="font-mono bg-secondary/50 border-border/50 focus:border-primary/50"
+                        />
+                        <Button
+                          onClick={handleRequestPairCode}
+                          disabled={getBotPairCode.isPending || !pairPhone.trim()}
+                          data-testid="button-get-pair-code"
+                          className="shrink-0"
+                        >
+                          {getBotPairCode.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Get Code"}
+                        </Button>
+                      </div>
+
+                      {pairCode && (
+                        <div className="flex items-center justify-center p-4 bg-primary/10 border border-primary/30 rounded-lg">
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground mb-1">Your Pairing Code</p>
+                            <p className="text-3xl font-bold font-mono text-primary tracking-widest" data-testid="text-pair-code">
+                              {pairCode}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Enter this in WhatsApp</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ─── SETTINGS TAB ─── */}
+        <TabsContent value="settings" className="mt-4 space-y-6">
+          {/* Mode selection */}
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                Bot Mode
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  data-testid="button-mode-public"
+                  onClick={() => handleToggleMode("public")}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    bot?.mode === "public"
+                      ? "border-primary bg-primary/10"
+                      : "border-border/50 hover:border-border bg-secondary/20"
+                  }`}
+                >
+                  <Globe className={`w-5 h-5 mb-2 ${bot?.mode === "public" ? "text-primary" : "text-muted-foreground"}`} />
+                  <p className={`font-medium text-sm ${bot?.mode === "public" ? "text-primary" : ""}`}>Public</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Responds in groups & DMs</p>
+                </button>
+                <button
+                  data-testid="button-mode-private"
+                  onClick={() => handleToggleMode("private")}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    bot?.mode === "private"
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-border/50 hover:border-border bg-secondary/20"
+                  }`}
+                >
+                  <Lock className={`w-5 h-5 mb-2 ${bot?.mode === "private" ? "text-blue-400" : "text-muted-foreground"}`} />
+                  <p className={`font-medium text-sm ${bot?.mode === "private" ? "text-blue-400" : ""}`}>Private</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Responds in DMs only</p>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Feature Toggles by category */}
+          {CATEGORIES.map((category) => {
+            const features = FEATURE_TOGGLES.filter((f) => f.category === category);
+            return (
+              <Card key={category} className="bg-card/50 border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm text-muted-foreground uppercase tracking-wider">{category}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {features.map((feature) => {
+                    const Icon = feature.icon;
+                    const value = bot ? (bot as any)[feature.key] as boolean : false;
+                    return (
+                      <div key={feature.key} className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${value ? "bg-primary/20" : "bg-secondary/50"}`}>
+                          <Icon className={`w-4 h-4 ${value ? "text-primary" : "text-muted-foreground"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm font-medium">{feature.label}</p>
+                              <p className="text-xs text-muted-foreground">{feature.description}</p>
+                            </div>
+                            <Switch
+                              data-testid={`switch-${feature.key}`}
+                              checked={value}
+                              onCheckedChange={(checked) => handleToggleFeature(feature.key, checked)}
+                              disabled={updateBot.isPending}
+                            />
+                          </div>
+                          {/* Auto-Reply message input */}
+                          {feature.key === "autoReply" && value && (
+                            <div className="mt-3 space-y-2">
+                              <Input
+                                data-testid="input-auto-reply-message"
+                                placeholder="e.g. Hi! I'm a bot, I'll get back to you..."
+                                defaultValue={bot?.autoReplyMessage ?? ""}
+                                onChange={(e) => setAutoReplyMsg(e.target.value)}
+                                className="bg-secondary/50 border-border/50 focus:border-primary/50 text-sm"
+                              />
+                              <Button size="sm" variant="outline" onClick={handleSaveAutoReply} disabled={updateBot.isPending}>
+                                <Save className="w-3.5 h-3.5 mr-1.5" />
+                                Save Message
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
