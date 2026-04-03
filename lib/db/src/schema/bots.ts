@@ -10,6 +10,7 @@ export const botsTable = pgTable("bots", {
   isActive: boolean("is_active").notNull().default(true),
   phoneNumber: text("phone_number"),
   sessionData: text("session_data"),
+  qrCode: text("qr_code"),
   prefix: text("prefix").notNull().default("!"),
   mode: text("mode").notNull().default("public"),
   // WhatsApp feature toggles

@@ -24,7 +24,7 @@ import { handleCommand } from "../commands/index";
 
 interface SessionEntry {
   socket: WASocket | null;
-  qrCode: string | null;
+  // qrCode is stored in the database, not in memory
   status: "offline" | "connecting" | "online";
   /** Timestamp (ms) when the current connection opened — used as stale-message cutoff */
   connectedAt: number;
@@ -42,7 +42,6 @@ function getOrCreateEntry(userId: string): SessionEntry {
   if (!activeSessions.has(userId)) {
     activeSessions.set(userId, {
       socket: null,
-      qrCode: null,
       status: "offline",
       connectedAt: 0,
       startupSent: false,
@@ -264,12 +263,15 @@ async function startSocket(
 
     if (qr) {
       try {
-        entry.qrCode = await QRCode.toDataURL(qr, {
+        const dataUrl = await QRCode.toDataURL(qr, {
           width: 300, margin: 2,
           color: { dark: "#000000", light: "#ffffff" },
         });
+        await db.update(botsTable).set({ qrCode: dataUrl, status: "connecting" })
+          .where(eq(botsTable.userId, userId));
       } catch {
-        entry.qrCode = qr;
+        await db.update(botsTable).set({ qrCode: qr, status: "connecting" })
+          .where(eq(botsTable.userId, userId));
       }
       entry.status = "connecting";
       onStatusChange?.("connecting");
@@ -285,12 +287,14 @@ async function startSocket(
 
       clearKeepalive(entry);
       entry.status = "offline";
-      entry.qrCode = null;
       entry.socket = null;
       onStatusChange?.("offline");
 
       try {
-        await db.update(botsTable).set({ status: "offline" }).where(eq(botsTable.userId, userId));
+        await db.update(botsTable).set({ status: "offline", qrCode: null })
+          .where(eq(botsTable.userId, userId));
+        // Hint to V8 GC that large objects can be collected
+        if (typeof global.gc === "function") global.gc();
       } catch {}
 
       if (loggedOut) {
@@ -322,7 +326,6 @@ async function startSocket(
       entry.reconnectCount = 0;
       entry.connectedAt = Date.now();
       entry.status = "online";
-      entry.qrCode = null;
       onStatusChange?.("online");
 
       console.log(`[whatsapp] Connection open for userId=${userId}`);
@@ -333,9 +336,11 @@ async function startSocket(
           .update(botsTable)
           .set({
             status: "online",
+            qrCode: null,
             phoneNumber: selfId ? jidFromPhone(selfId).replace("@s.whatsapp.net", "") : undefined,
           })
           .where(eq(botsTable.userId, userId));
+        if (typeof global.gc === "function") global.gc();
       } catch {}
 
       // Only send startup message on the first-ever connection, not reconnects
@@ -603,17 +608,19 @@ export async function reconnectAllSavedSessions() {
 export async function requestQRCode(userId: string) {
   const entry = getOrCreateEntry(userId);
 
-  if (entry.status === "online") return { qrCode: null, status: "online" };
-  if (entry.status === "connecting" && entry.qrCode) {
-    return { qrCode: entry.qrCode, status: "connecting" };
-  }
+  if (entry.status === "online") return { qrCode: null, status: "online" as const };
 
   if (!entry.socket) {
     await startSocket(userId, entry);
     await new Promise((r) => setTimeout(r, 3000));
   }
 
-  return { qrCode: entry.qrCode, status: entry.qrCode ? "connecting" : entry.status };
+  // Read QR from DB — it's never stored in memory
+  const [row] = await db.select({ qrCode: botsTable.qrCode })
+    .from(botsTable).where(eq(botsTable.userId, userId)).limit(1);
+  const qrCode = row?.qrCode ?? null;
+
+  return { qrCode, status: qrCode ? ("connecting" as const) : entry.status };
 }
 
 export async function requestPairingCode(userId: string, phoneNumber: string) {
@@ -638,13 +645,13 @@ export async function disconnectSession(userId: string) {
     try { await entry.socket.logout(); } catch {}
     entry.socket = null;
     entry.status = "offline";
-    entry.qrCode = null;
   }
   activeSessions.delete(userId);
   await clearDatabaseAuthState(userId);
   try {
-    await db.update(botsTable).set({ status: "offline", phoneNumber: null })
+    await db.update(botsTable).set({ status: "offline", phoneNumber: null, qrCode: null })
       .where(eq(botsTable.userId, userId));
+    if (typeof global.gc === "function") global.gc();
   } catch {}
 }
 
