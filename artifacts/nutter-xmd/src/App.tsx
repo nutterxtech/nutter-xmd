@@ -26,25 +26,37 @@ if (!clerkPubKey) {
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in .env file");
 }
 
-function SignInPage() {
+function AuthPageWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
+      {/* Cyberpunk grid background */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        backgroundImage: `linear-gradient(rgba(0,255,102,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,102,0.03) 1px, transparent 1px)`,
+        backgroundSize: "40px 40px",
+      }} />
+      {/* Corner glow accents */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none translate-x-1/2 translate-y-1/2" />
       <div className="relative z-10 w-full max-w-md">
-        <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+        {children}
       </div>
     </div>
   );
 }
 
+function SignInPage() {
+  return (
+    <AuthPageWrapper>
+      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+    </AuthPageWrapper>
+  );
+}
+
 function SignUpPage() {
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
-      <div className="relative z-10 w-full max-w-md">
-        <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
-      </div>
-    </div>
+    <AuthPageWrapper>
+      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+    </AuthPageWrapper>
   );
 }
 
@@ -108,10 +120,31 @@ function ClerkProviderWithRoutes() {
       appearance={{
         variables: {
           colorPrimary: "#00ff66",
-          colorBackground: "#0a0a0a",
+          colorBackground: "#111111",
           colorText: "#ffffff",
+          colorTextSecondary: "#aaaaaa",
           colorInputBackground: "#1a1a1a",
           colorInputText: "#ffffff",
+          colorInputPlaceholder: "#555555",
+          borderRadius: "0.5rem",
+        },
+        elements: {
+          card: "bg-[#111111] border border-[#00ff66]/25 shadow-[0_0_40px_rgba(0,255,102,0.08)] rounded-xl",
+          headerTitle: "text-white font-bold tracking-wide",
+          headerSubtitle: "text-[#aaaaaa]",
+          socialButtonsBlockButton: "border border-[#2a2a2a] bg-[#1a1a1a] hover:bg-[#222222] hover:border-[#00ff66]/40 text-white transition-colors",
+          socialButtonsBlockButtonText: "text-white font-medium",
+          formButtonPrimary: "bg-[#00ff66] hover:bg-[#00cc55] text-black font-bold shadow-[0_0_15px_rgba(0,255,102,0.3)] transition-all",
+          footerActionLink: "text-[#00ff66] hover:text-[#33ff88] font-medium",
+          dividerLine: "bg-[#2a2a2a]",
+          dividerText: "text-[#555555]",
+          formFieldInput: "border border-[#2a2a2a] bg-[#1a1a1a] text-white focus:border-[#00ff66]/60 focus:shadow-[0_0_10px_rgba(0,255,102,0.1)] transition-all",
+          formFieldLabel: "text-[#cccccc] font-medium",
+          identityPreviewText: "text-white",
+          identityPreviewEditButton: "text-[#00ff66] hover:text-[#33ff88]",
+          otpCodeFieldInput: "border-[#2a2a2a] bg-[#1a1a1a] text-white",
+          alertText: "text-[#ff4444]",
+          logoImage: "opacity-90",
         },
       }}
     >
