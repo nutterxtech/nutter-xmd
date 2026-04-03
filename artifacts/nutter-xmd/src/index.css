@@ -237,101 +237,168 @@
 }
 
 /* ── Clerk auth card — dark cyberpunk overrides ─────────────────────────────
-   Clerk renders its own HTML with specific class names. We override them here
-   so the card is always visible on our dark background.
+   Clerk renders its own shadow DOM / scoped HTML. We need !important on every
+   rule and broad selectors to guarantee visibility on our dark background.
    ───────────────────────────────────────────────────────────────────────── */
+
+/* Root modal / card backgrounds */
+.cl-modalContent,
 .cl-card,
-.cl-card__sign-in,
-.cl-card__sign-up {
+[class*="cl-card"] {
   background-color: #111111 !important;
   border: 1px solid rgba(0, 255, 102, 0.2) !important;
   box-shadow: 0 0 40px rgba(0, 255, 102, 0.06), 0 8px 32px rgba(0, 0, 0, 0.6) !important;
   border-radius: 12px !important;
+  color: #ffffff !important;
 }
 
-.cl-headerTitle {
+/* Broadly target any text inside Clerk's card so nothing is invisible */
+[class^="cl-"] {
+  color: #ffffff;
+}
+
+/* Header */
+.cl-headerTitle,
+[class*="cl-headerTitle"] {
   color: #ffffff !important;
   font-weight: 700 !important;
 }
-
 .cl-headerSubtitle,
-.cl-headerTitle + * {
+[class*="cl-headerSubtitle"] {
   color: #aaaaaa !important;
 }
 
-.cl-formFieldLabel {
+/* Form labels */
+.cl-formFieldLabel,
+[class*="cl-formFieldLabel"] {
   color: #cccccc !important;
   font-weight: 500 !important;
 }
 
-.cl-formFieldInput,
-.cl-formFieldInput:focus {
-  background-color: #1a1a1a !important;
-  border-color: #2a2a2a !important;
-  color: #ffffff !important;
+/* Form hint / error text */
+.cl-formFieldHintText,
+.cl-formFieldErrorText,
+[class*="cl-formFieldHintText"],
+[class*="cl-formFieldErrorText"] {
+  color: #aaaaaa !important;
+}
+.cl-formFieldErrorText,
+[class*="cl-formFieldErrorText"] {
+  color: #ff6666 !important;
 }
 
-.cl-formFieldInput:focus {
+/* Inputs */
+.cl-formFieldInput,
+[class*="cl-formFieldInput"] {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2a2a2a !important;
+  color: #ffffff !important;
+  caret-color: #00ff66 !important;
+}
+.cl-formFieldInput:focus,
+[class*="cl-formFieldInput"]:focus {
   border-color: rgba(0, 255, 102, 0.5) !important;
   box-shadow: 0 0 8px rgba(0, 255, 102, 0.15) !important;
+  outline: none !important;
+}
+.cl-formFieldInput::placeholder,
+[class*="cl-formFieldInput"]::placeholder {
+  color: #555555 !important;
 }
 
+/* Primary action button */
 .cl-formButtonPrimary,
-.cl-formButtonPrimary:hover {
+[class*="cl-formButtonPrimary"] {
   background-color: #00ff66 !important;
   color: #000000 !important;
   font-weight: 700 !important;
 }
-
-.cl-formButtonPrimary:hover {
+.cl-formButtonPrimary:hover,
+[class*="cl-formButtonPrimary"]:hover {
   background-color: #00cc55 !important;
 }
 
-.cl-footerActionLink {
+/* Footer links */
+.cl-footerActionLink,
+[class*="cl-footerActionLink"] {
   color: #00ff66 !important;
 }
-
-.cl-footerActionLink:hover {
+.cl-footerActionLink:hover,
+[class*="cl-footerActionLink"]:hover {
   color: #33ff88 !important;
 }
-
 .cl-footerActionText,
-.cl-dividerText,
-.cl-identityPreviewText,
-.cl-userPreviewTextContainer * {
-  color: #aaaaaa !important;
+[class*="cl-footerActionText"] {
+  color: #888888 !important;
 }
 
-.cl-dividerLine {
+/* Footer container */
+.cl-footer,
+[class*="cl-footer"] {
+  background-color: #0d0d0d !important;
+  border-top: 1px solid #1e1e1e !important;
+}
+
+/* Divider */
+.cl-dividerLine,
+[class*="cl-dividerLine"] {
   background-color: #2a2a2a !important;
 }
-
-.cl-socialButtonsBlockButton {
-  background-color: #1a1a1a !important;
-  border-color: #2a2a2a !important;
-  color: #ffffff !important;
+.cl-dividerText,
+[class*="cl-dividerText"] {
+  color: #555555 !important;
 }
 
-.cl-socialButtonsBlockButton:hover {
+/* Social / alternate buttons */
+.cl-socialButtonsBlockButton,
+[class*="cl-socialButtonsBlockButton"],
+.cl-alternativeMethodsBlockButton,
+[class*="cl-alternativeMethodsBlockButton"] {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2a2a2a !important;
+  color: #ffffff !important;
+}
+.cl-socialButtonsBlockButton:hover,
+[class*="cl-socialButtonsBlockButton"]:hover {
   background-color: #222222 !important;
   border-color: rgba(0, 255, 102, 0.3) !important;
 }
-
-.cl-socialButtonsBlockButtonText {
+.cl-socialButtonsBlockButtonText,
+[class*="cl-socialButtonsBlockButtonText"] {
   color: #ffffff !important;
 }
 
-.cl-internal-b3fm6y,
-.cl-alternativeMethodsBlockButton {
+/* Identity preview (shows email + back button) */
+.cl-identityPreviewText,
+[class*="cl-identityPreviewText"] {
   color: #ffffff !important;
 }
-
-.cl-otpCodeFieldInput {
-  background-color: #1a1a1a !important;
-  border-color: #2a2a2a !important;
-  color: #ffffff !important;
-}
-
-.cl-formResendCodeLink {
+.cl-identityPreviewEditButton,
+[class*="cl-identityPreviewEditButton"] {
   color: #00ff66 !important;
+}
+
+/* OTP / phone input */
+.cl-otpCodeFieldInput,
+[class*="cl-otpCodeFieldInput"] {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2a2a2a !important;
+  color: #ffffff !important;
+}
+
+/* Resend code link */
+.cl-formResendCodeLink,
+[class*="cl-formResendCodeLink"] {
+  color: #00ff66 !important;
+}
+
+/* Internal Clerk dynamic class names (change version-to-version) */
+[class*="cl-internal-"] {
+  color: #cccccc !important;
+}
+[class*="cl-internal-"][role="button"],
+[class*="cl-internal-"] button {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  border-color: #2a2a2a !important;
 }

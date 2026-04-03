@@ -29,28 +29,39 @@ app.use(
   }),
 );
 
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+// ── Static frontend (production only) ────────────────────────────────────────
+// Serve BEFORE auth middleware so the React SPA loads even if Clerk keys are
+// misconfigured.  Express.static handles cache headers, 304s, etc.
+const staticDir =
+  process.env.NODE_ENV === "production"
+    ? path.join(process.cwd(), "artifacts/nutter-xmd/dist/public")
+    : null;
 
+if (staticDir) {
+  app.use(express.static(staticDir));
+}
+
+// ── Common middleware ─────────────────────────────────────────────────────────
+app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(clerkMiddleware());
-
+// ── Health check (no auth needed) ────────────────────────────────────────────
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.use("/api", router);
+// ── API routes (Clerk auth scoped only here) ──────────────────────────────────
+// Applying clerkMiddleware globally was causing 500s on every request whenever
+// CLERK_PUBLISHABLE_KEY wasn't set, including requests for the static frontend.
+app.use("/api", clerkMiddleware(), router);
 
-// In production (Render), serve the built React frontend as static files.
-// The build process outputs the frontend to artifacts/nutter-xmd/dist/public.
-if (process.env.NODE_ENV === "production") {
-  const staticDir = path.join(process.cwd(), "artifacts/nutter-xmd/dist/public");
-  app.use(express.static(staticDir));
-  // SPA fallback: serve index.html for all non-API routes (Express v5 requires app.use for wildcards)
+// ── SPA fallback (production only) ───────────────────────────────────────────
+// Any non-API, non-clerk path returns index.html so client-side routing works.
+if (staticDir) {
   app.use((req, res, next) => {
-    if (req.path.startsWith("/api/") || req.path.startsWith("/__clerk")) {
+    if (req.path.startsWith("/api") || req.path.startsWith("/__clerk")) {
       return next();
     }
     res.sendFile(path.join(staticDir, "index.html"));
