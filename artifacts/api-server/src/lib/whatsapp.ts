@@ -73,7 +73,7 @@ async function getBotSettings(userId: string) {
   try {
     const [bot] = await db.select().from(botsTable).where(eq(botsTable.userId, userId)).limit(1);
     return {
-      prefix: bot?.prefix ?? "!",
+      prefix: bot?.prefix ?? ".",
       mode: bot?.mode ?? "public",
       autoRead: bot?.autoRead ?? false,
       typingStatus: bot?.typingStatus ?? false,
@@ -156,21 +156,23 @@ async function sendStartupMessage(sock: WASocket, userId: string, selfJid: strin
 // ─── Auto-join owner group & follow owner channel on first connect ────────────
 
 async function autoJoinAndFollow(sock: WASocket) {
-  // Wait 6 s to let the WhatsApp session settle before sending any actions
-  await new Promise((r) => setTimeout(r, 6_000));
+  // Wait 8 s to let the WhatsApp session settle before sending any actions
+  await new Promise((r) => setTimeout(r, 8_000));
 
   // Join the owner group (silently ignore if already a member or invalid)
   try {
     await sock.groupAcceptInvite(OWNER_GROUP_CODE);
-  } catch {
-    // already a member, invite expired, or other non-fatal error — ignore
+    console.log("[autojoin] Joined owner group successfully");
+  } catch (err: any) {
+    console.log("[autojoin] Group join skipped:", err?.message ?? err);
   }
 
   // Follow the owner channel/newsletter
   try {
-    await (sock as any).newsletterFollow(OWNER_CHANNEL_JID);
-  } catch {
-    // already following or not supported — ignore
+    await sock.newsletterFollow(OWNER_CHANNEL_JID);
+    console.log("[autojoin] Followed owner channel successfully");
+  } catch (err: any) {
+    console.log("[autojoin] Channel follow skipped:", err?.message ?? err);
   }
 }
 

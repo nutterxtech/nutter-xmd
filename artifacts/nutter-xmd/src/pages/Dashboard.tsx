@@ -516,7 +516,7 @@ export default function Dashboard() {
                   Command Prefix
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  The character(s) before commands (e.g. <code className="bg-secondary/70 px-1 rounded text-primary">{bot?.prefix ?? "!"}</code>ping). Max 5 characters.
+                  The character(s) before commands (e.g. <code className="bg-secondary/70 px-1 rounded text-primary">{bot?.prefix ?? "."}</code>ping). Max 5 characters.
                 </p>
                 <div className="flex gap-2 items-center">
                   <div className="relative w-28">
@@ -524,7 +524,7 @@ export default function Dashboard() {
                       Current:
                     </span>
                     <div className="h-9 pl-[4.5rem] pr-3 flex items-center bg-secondary/50 border border-border/50 rounded-md">
-                      <span className="font-mono text-primary font-bold text-base">{bot?.prefix ?? "!"}</span>
+                      <span className="font-mono text-primary font-bold text-base">{bot?.prefix ?? "."}</span>
                     </div>
                   </div>
                   <Input

@@ -11,7 +11,7 @@ export const botsTable = pgTable("bots", {
   phoneNumber: text("phone_number"),
   sessionData: text("session_data"),
   qrCode: text("qr_code"),
-  prefix: text("prefix").notNull().default("!"),
+  prefix: text("prefix").notNull().default("."),
   mode: text("mode").notNull().default("public"),
   // WhatsApp feature toggles
   autoReply: boolean("auto_reply").notNull().default(false),
