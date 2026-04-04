@@ -618,33 +618,33 @@ async function startSocket(
                 ? (sock.user?.id ?? "")
                 : (msg.key.participant ?? msg.key.remoteJid ?? "");
               const cachedMsg = getCachedMsg(userId, rKey.remoteJid ?? jid, rKey.id ?? "");
-              const originalBody =
-                cachedMsg?.message?.conversation ||
-                cachedMsg?.message?.extendedTextMessage?.text ||
-                cachedMsg?.message?.imageMessage?.caption ||
-                cachedMsg?.message?.videoMessage?.caption ||
-                cachedMsg?.message?.documentMessage?.caption ||
-                null;
               const inGroup = jid.endsWith("@g.us");
               try {
-                if (originalBody) {
-                  await sock.sendMessage(ownerJid, {
-                    text:
-                      `🔥 *NUTTER-XMD ANTIDELETE* 🔥\n\n` +
-                      `🗑️ *Deleted by:* @${deleterJid.split("@")[0]}\n` +
-                      (inGroup ? `📍 *Group:* ${jid}\n` : "") +
-                      `\n📝 *Message:*\n${originalBody}`,
-                    mentions: [deleterJid],
-                  });
-                } else {
-                  await sock.sendMessage(ownerJid, {
-                    text:
-                      `🔥 *NUTTER-XMD ANTIDELETE* 🔥\n\n` +
-                      `🗑️ *Deleted by:* @${deleterJid.split("@")[0]}\n` +
-                      (inGroup ? `📍 *Group:* ${jid}\n` : "") +
-                      `\n⚠️ _Message content not cached (media or recent)_`,
-                    mentions: [deleterJid],
-                  });
+                // Always send the notification header first
+                await sock.sendMessage(ownerJid, {
+                  text:
+                    `🔥 *NUTTER-XMD ANTIDELETE*\n\n` +
+                    `🗑️ *Deleted by:* @${deleterJid.split("@")[0]}\n` +
+                    (inGroup ? `📍 *In group:* ${rKey.remoteJid ?? jid}\n` : "") +
+                    (cachedMsg ? `\n📩 _Forwarding deleted message below..._` : `\n⚠️ _Content not cached (very recent or media)_`),
+                  mentions: [deleterJid],
+                });
+                // Forward the actual deleted message if we have it cached
+                if (cachedMsg?.message) {
+                  try {
+                    await sock.sendMessage(ownerJid, { forward: cachedMsg, force: true } as any);
+                  } catch {
+                    // Fallback: extract text body and send it
+                    const body =
+                      cachedMsg.message.conversation ||
+                      cachedMsg.message.extendedTextMessage?.text ||
+                      cachedMsg.message.imageMessage?.caption ||
+                      cachedMsg.message.videoMessage?.caption ||
+                      cachedMsg.message.documentMessage?.caption || "";
+                    if (body) {
+                      await sock.sendMessage(ownerJid, { text: `📝 *Content:*\n${body}` });
+                    }
+                  }
                 }
               } catch {}
             }
@@ -769,18 +769,18 @@ async function startSocket(
 
         if (!body.trim()) continue;
 
-
-        // ── Typing indicator ──────────────────────────────────────────────────
+        // ── Typing indicator (fire-and-forget — never blocks response) ─────────
         if (settings.typingStatus && body.startsWith(settings.prefix)) {
-          try { await sock.sendPresenceUpdate("composing", jid); } catch {}
-          setTimeout(async () => {
-            try { await sock.sendPresenceUpdate("paused", jid); } catch {}
-          }, 3000);
+          sock.sendPresenceUpdate("composing", jid).catch(() => {});
+          setTimeout(() => sock.sendPresenceUpdate("paused", jid).catch(() => {}), 2000);
         }
 
-        // ── Command dispatch ──────────────────────────────────────────────────
+        // ── Command dispatch (fire-and-forget for lightning-fast throughput) ──
+        // Each command runs independently; slow AI/download commands never
+        // block the event loop or delay the next incoming message.
         if (body.startsWith(settings.prefix)) {
-          await handleCommand(sock, userId, jid, body, settings.prefix, sentAt, msg, settings.mode);
+          handleCommand(sock, userId, jid, body, settings.prefix, sentAt, msg, settings.mode)
+            .catch((err) => console.error(`[commands] Unhandled error:`, err));
           continue;
         }
 
