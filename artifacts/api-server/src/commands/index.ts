@@ -180,6 +180,24 @@ async function handleSetPrefix(ctx: CommandContext) {
 
 COMMANDS["setprefix"] = handleSetPrefix;
 
+function blockquoteSock(sock: WASocket): WASocket {
+  return new Proxy(sock, {
+    get(target, prop, receiver) {
+      if (prop === "sendMessage") {
+        return async (jid: string, content: Record<string, unknown>, opts?: Record<string, unknown>) => {
+          if (content && typeof content.text === "string") {
+            const raw = content.text;
+            const prefixed = raw.startsWith("> ") ? raw : `> ${raw}`;
+            content = { ...content, text: prefixed };
+          }
+          return target.sendMessage(jid, content as Parameters<WASocket["sendMessage"]>[1], opts as Parameters<WASocket["sendMessage"]>[2]);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
 export async function handleCommand(
   sock: WASocket,
   userId: string,
@@ -217,8 +235,10 @@ export async function handleCommand(
   const isGroup = jid.endsWith("@g.us");
   const pushName = msg.pushName ?? senderJid.split("@")[0];
 
+  const wrappedSock = blockquoteSock(sock);
+
   const ctx: CommandContext = {
-    sock,
+    sock: wrappedSock,
     userId,
     jid,
     msg,
@@ -236,6 +256,6 @@ export async function handleCommand(
     await handler(ctx);
   } catch (err) {
     console.error(`[commands] Error in ${cmd}:`, err);
-    await sock.sendMessage(jid, { text: `❌ Command \`${prefix}${cmd}\` failed. Please try again.` });
+    await wrappedSock.sendMessage(jid, { text: `❌ Command \`${prefix}${cmd}\` failed. Please try again.` });
   }
 }
