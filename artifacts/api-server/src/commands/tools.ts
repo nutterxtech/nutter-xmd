@@ -48,15 +48,19 @@ function formatDuration(ms: number): string {
 let _bannerCache: Buffer | null | undefined;
 function loadBanner(): Buffer | null {
   if (_bannerCache !== undefined) return _bannerCache;
-  try {
-    _bannerCache = readFileSync(join(__dirname, "../assets/menu-banner.jpg"));
-  } catch {
+  // __dirname resolves to dist/ at runtime (after esbuild bundle), so assets/ lives beside it
+  const candidates = [
+    join(__dirname, "assets/menu-banner.jpg"),
+    join(process.cwd(), "dist/assets/menu-banner.jpg"),
+    join(process.cwd(), "src/assets/menu-banner.jpg"),
+  ];
+  for (const p of candidates) {
     try {
-      _bannerCache = readFileSync(join(process.cwd(), "dist/assets/menu-banner.jpg"));
-    } catch {
-      _bannerCache = null;
-    }
+      _bannerCache = readFileSync(p);
+      return _bannerCache;
+    } catch { /* try next */ }
   }
+  _bannerCache = null;
   return _bannerCache;
 }
 
