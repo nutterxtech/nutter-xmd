@@ -1,8 +1,24 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import type { CommandContext } from "./context";
+
+function getBanner(): Buffer | null {
+  try {
+    const assetPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "assets/menu-banner.png"
+    );
+    return readFileSync(assetPath);
+  } catch {
+    return null;
+  }
+}
 
 export async function menuCommand(ctx: CommandContext) {
   const { sock, jid, prefix, pushName } = ctx;
 
+  const p = prefix;
   const date = new Date().toLocaleString("en-GB", {
     timeZone: "Africa/Nairobi",
     weekday: "short",
@@ -13,62 +29,154 @@ export async function menuCommand(ctx: CommandContext) {
     minute: "2-digit",
   });
 
-  const p = prefix;
-
   const menu =
-    `*NUTTER-XMD* — Command Reference\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `👤 *User:* ${pushName}\n` +
-    `🔡 *Prefix:* ${p}\n` +
-    `📅 *Date:* ${date}\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `╰►Hey, ${pushName} 👾\n` +
+    `╭───〔 *NUTTER-XMD* 〕──────┈\n` +
+    `├──────────────\n` +
+    `│✵│▸ 𝐓𝐎𝐓𝐀𝐋 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒: 103\n` +
+    `│✵│▸ 𝐏𝐑𝐄𝐅𝐈𝐗: ${p}\n` +
+    `│✵│▸ 𝐔𝐒𝐄𝐑: ${pushName}\n` +
+    `│✵│▸ 𝐃𝐀𝐓𝐄: ${date}\n` +
+    `╰──────────────────────⊷\n\n` +
 
-    `🤖 *AI & Intelligence*\n` +
-    `\`${p}gpt\` \`${p}gemini\` \`${p}deepseek\` \`${p}blackbox\`\n` +
-    `\`${p}code\` \`${p}analyze\` \`${p}summarize\` \`${p}translate\`\n` +
-    `\`${p}recipe\` \`${p}story\` \`${p}teach\` \`${p}generate\`\n\n` +
+    `╭─────「 🤖 AI 」───┈⊷\n` +
+    `││◦➛ ${p}gpt\n` +
+    `││◦➛ ${p}gemini\n` +
+    `││◦➛ ${p}deepseek\n` +
+    `││◦➛ ${p}blackbox\n` +
+    `││◦➛ ${p}code\n` +
+    `││◦➛ ${p}analyze\n` +
+    `││◦➛ ${p}summarize\n` +
+    `││◦➛ ${p}translate\n` +
+    `││◦➛ ${p}recipe\n` +
+    `││◦➛ ${p}story\n` +
+    `││◦➛ ${p}teach\n` +
+    `││◦➛ ${p}generate\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `⬇️ *Downloads*\n` +
-    `\`${p}youtube\` \`${p}song\` \`${p}tiktok\` \`${p}instagram\`\n` +
-    `\`${p}twitter\` \`${p}facebook\` \`${p}gdrive\` \`${p}mediafire\`\n\n` +
+    `╭─────「 ⬇️ DOWNLOADS 」───┈⊷\n` +
+    `││◦➛ ${p}youtube\n` +
+    `││◦➛ ${p}song\n` +
+    `││◦➛ ${p}tiktok\n` +
+    `││◦➛ ${p}instagram\n` +
+    `││◦➛ ${p}twitter\n` +
+    `││◦➛ ${p}facebook\n` +
+    `││◦➛ ${p}gdrive\n` +
+    `││◦➛ ${p}mediafire\n` +
+    `││◦➛ ${p}image\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `🔊 *Audio*\n` +
-    `\`${p}tomp3\` \`${p}toptt\` \`${p}bass\` \`${p}earrape\`\n` +
-    `\`${p}reverse\` \`${p}robot\` \`${p}deep\`\n\n` +
+    `╭─────「 🔊 AUDIO 」───┈⊷\n` +
+    `││◦➛ ${p}tomp3\n` +
+    `││◦➛ ${p}toptt\n` +
+    `││◦➛ ${p}bass\n` +
+    `││◦➛ ${p}earrape\n` +
+    `││◦➛ ${p}reverse\n` +
+    `││◦➛ ${p}robot\n` +
+    `││◦➛ ${p}deep\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `😄 *Fun*\n` +
-    `\`${p}fact\` \`${p}jokes\` \`${p}quotes\` \`${p}trivia\`\n` +
-    `\`${p}truth\` \`${p}dare\` \`${p}truthordare\`\n\n` +
+    `╭─────「 😄 FUN 」───┈⊷\n` +
+    `││◦➛ ${p}fact\n` +
+    `││◦➛ ${p}jokes\n` +
+    `││◦➛ ${p}quotes\n` +
+    `││◦➛ ${p}trivia\n` +
+    `││◦➛ ${p}truth\n` +
+    `││◦➛ ${p}dare\n` +
+    `││◦➛ ${p}truthordare\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `👥 *Group Management*\n` +
-    `\`${p}kick\` \`${p}promote\` \`${p}demote\` \`${p}add\`\n` +
-    `\`${p}invite\` \`${p}open\` \`${p}close\` \`${p}poll\`\n` +
-    `\`${p}tagall\` \`${p}hidetag\` \`${p}kickall\`\n` +
-    `\`${p}setgroupname\` \`${p}setdesc\`\n\n` +
+    `╭─────「 🔍 SEARCH 」───┈⊷\n` +
+    `││◦➛ ${p}weather\n` +
+    `││◦➛ ${p}define\n` +
+    `││◦➛ ${p}imdb\n` +
+    `││◦➛ ${p}lyrics\n` +
+    `││◦➛ ${p}yts\n` +
+    `││◦➛ ${p}shazam\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `🔍 *Search & Lookup*\n` +
-    `\`${p}weather\` \`${p}define\` \`${p}imdb\`\n` +
-    `\`${p}lyrics\` \`${p}yts\` \`${p}shazam\`\n\n` +
+    `╭─────「 🛠️ TOOLS 」───┈⊷\n` +
+    `││◦➛ ${p}sticker\n` +
+    `││◦➛ ${p}emojimix\n` +
+    `││◦➛ ${p}qrcode\n` +
+    `││◦➛ ${p}tinyurl\n` +
+    `││◦➛ ${p}calculate\n` +
+    `││◦➛ ${p}genpass\n` +
+    `││◦➛ ${p}say\n` +
+    `││◦➛ ${p}getpp\n` +
+    `││◦➛ ${p}fancy\n` +
+    `││◦➛ ${p}fliptext\n` +
+    `││◦➛ ${p}device\n` +
+    `││◦➛ ${p}disk\n` +
+    `││◦➛ ${p}ping\n` +
+    `││◦➛ ${p}runtime\n` +
+    `││◦➛ ${p}time\n` +
+    `││◦➛ ${p}repo\n` +
+    `││◦➛ ${p}botstatus\n` +
+    `││◦➛ ${p}vv\n` +
+    `││◦➛ ${p}pair\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `🛠️ *Utilities*\n` +
-    `\`${p}sticker\` \`${p}emojimix\` \`${p}qrcode\` \`${p}tinyurl\`\n` +
-    `\`${p}calculate\` \`${p}genpass\` \`${p}say\` \`${p}getpp\`\n` +
-    `\`${p}fancy\` \`${p}fliptext\` \`${p}device\` \`${p}disk\`\n` +
-    `\`${p}ping\` \`${p}runtime\` \`${p}time\` \`${p}vv\`\n\n` +
+    `╭─────「 👥 GROUP 」───┈⊷\n` +
+    `││◦➛ ${p}kick\n` +
+    `││◦➛ ${p}promote\n` +
+    `││◦➛ ${p}demote\n` +
+    `││◦➛ ${p}add\n` +
+    `││◦➛ ${p}invite\n` +
+    `││◦➛ ${p}open\n` +
+    `││◦➛ ${p}close\n` +
+    `││◦➛ ${p}poll\n` +
+    `││◦➛ ${p}tagall\n` +
+    `││◦➛ ${p}hidetag\n` +
+    `││◦➛ ${p}kickall\n` +
+    `││◦➛ ${p}setgroupname\n` +
+    `││◦➛ ${p}setdesc\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `⚙️ *Settings*\n` +
-    `\`${p}anticall\` \`${p}antilink\` \`${p}antisticker\`\n` +
-    `\`${p}antitag\` \`${p}antibadword\` \`${p}autoread\`\n` +
-    `\`${p}alwaysonline\` \`${p}autoviewstatus\` \`${p}autolikestatus\`\n` +
-    `\`${p}mode\` \`${p}setprefix\` \`${p}setwelcome\`\n\n` +
+    `╭─────「 ⚙️ SETTINGS 」───┈⊷\n` +
+    `││◦➛ ${p}anticall\n` +
+    `││◦➛ ${p}antilink\n` +
+    `││◦➛ ${p}antisticker\n` +
+    `││◦➛ ${p}antitag\n` +
+    `││◦➛ ${p}antibadword\n` +
+    `││◦➛ ${p}chatbot\n` +
+    `││◦➛ ${p}autoread\n` +
+    `││◦➛ ${p}alwaysonline\n` +
+    `││◦➛ ${p}autoviewstatus\n` +
+    `││◦➛ ${p}autolikestatus\n` +
+    `││◦➛ ${p}autotype\n` +
+    `││◦➛ ${p}antidelete\n` +
+    `││◦➛ ${p}mode\n` +
+    `││◦➛ ${p}setprefix\n` +
+    `││◦➛ ${p}setwelcome\n` +
+    `││◦➛ ${p}setgoodbye\n` +
+    `││◦➛ ${p}getsettings\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `👑 *Owner*\n` +
-    `\`${p}block\` \`${p}unblock\` \`${p}delete\` \`${p}warn\`\n` +
-    `\`${p}join\` \`${p}leave\` \`${p}setbio\` \`${p}restart\`\n\n` +
+    `╭─────「 👑 OWNER 」───┈⊷\n` +
+    `││◦➛ ${p}block\n` +
+    `││◦➛ ${p}unblock\n` +
+    `││◦➛ ${p}delete\n` +
+    `││◦➛ ${p}warn\n` +
+    `││◦➛ ${p}join\n` +
+    `││◦➛ ${p}leave\n` +
+    `││◦➛ ${p}online\n` +
+    `││◦➛ ${p}setbio\n` +
+    `││◦➛ ${p}restart\n` +
+    `╰──────────────┈⊷\n\n` +
 
-    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `_Send \`${p}<command>\` to run a command_\n` +
-    `_Powered by *NUTTER-XMD*_`;
+    `_Powered by *NUTTER-XMD* ⚡_\n` +
+    `_Type ${p}<command> to run_`;
 
-  await sock.sendMessage(jid, { text: menu });
+  const banner = getBanner();
+
+  if (banner) {
+    await sock.sendMessage(jid, {
+      image: banner,
+      caption: menu,
+      mimetype: "image/png",
+    });
+  } else {
+    await sock.sendMessage(jid, { text: menu });
+  }
 }
