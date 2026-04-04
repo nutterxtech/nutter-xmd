@@ -1,11 +1,10 @@
 import { Link } from "wouter";
-import { useUser, useClerk } from "@clerk/react";
-import { TerminalSquare, LayoutDashboard, LogOut } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { TerminalSquare, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useUser();
-  const { signOut } = useClerk();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
@@ -19,15 +18,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 text-sm">
             <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-              {user?.firstName?.[0] || user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() || "U"}
+              {user?.username?.[0]?.toUpperCase() || "U"}
             </div>
-            <span className="text-muted-foreground">{user?.firstName || user?.primaryEmailAddress?.emailAddress}</span>
+            <span className="text-muted-foreground">{user?.username || user?.email}</span>
           </div>
           <Button
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-3"
-            onClick={() => signOut()}
+            onClick={signOut}
           >
             <LogOut className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Sign Out</span>

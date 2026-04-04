@@ -11,7 +11,7 @@ pnpm workspace monorepo using TypeScript.
 - **Frontend**: React + Vite (artifact: `nutter-xmd`, previewPath: `/`)
 - **API**: Node.js + Express 5 (artifact: `api-server`, port: 8080)
 - **Database**: PostgreSQL + Drizzle ORM
-- **Auth**: Clerk (frontend + API; `proxyMiddleware` BEFORE body parsers in app.ts)
+- **Auth**: Custom JWT (bcrypt password hashing, 30-day tokens stored in localStorage; no Clerk dependency)
 - **Codegen**: Orval from OpenAPI spec (`lib/api-spec/openapi.yaml` → `lib/api-client-react/src/generated/`, `lib/api-zod/src/generated/`)
 
 ## Pages

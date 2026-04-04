@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, botsTable, whatsappAuthTable, botCommandsTable } from "@workspace/db";
+import { eq, inArray } from "drizzle-orm";
+import { db, botsTable, whatsappAuthTable, botCommandsTable, usersTable } from "@workspace/db";
 import { AdminLoginBody } from "@workspace/api-zod";
-import { createClerkClient } from "@clerk/express";
 import { disconnectSession } from "../lib/whatsapp";
 
 const router: IRouter = Router();
@@ -20,32 +19,20 @@ const requireAdminAuth = (req: any, res: any, next: any) => {
   next();
 };
 
-// Clerk client for fetching user emails — only instantiated if key is present
-function getClerkClient() {
-  const key = process.env.CLERK_SECRET_KEY;
-  if (!key) return null;
-  return createClerkClient({ secretKey: key });
-}
+async function enrichWithUserData(userIds: string[]) {
+  if (!userIds.length) return {};
+  const numericIds = userIds.map(Number).filter(Boolean);
+  if (!numericIds.length) return {};
 
-async function enrichWithClerkData(userIds: string[]) {
-  const clerk = getClerkClient();
-  const map: Record<string, { email: string | null; firstName: string | null; lastName: string | null }> = {};
-  if (!clerk) return map;
+  const users = await db
+    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email })
+    .from(usersTable)
+    .where(inArray(usersTable.id, numericIds));
 
-  await Promise.all(
-    userIds.map(async (uid) => {
-      try {
-        const user = await clerk.users.getUser(uid);
-        map[uid] = {
-          email: user.emailAddresses[0]?.emailAddress ?? null,
-          firstName: user.firstName ?? null,
-          lastName: user.lastName ?? null,
-        };
-      } catch {
-        map[uid] = { email: null, firstName: null, lastName: null };
-      }
-    })
-  );
+  const map: Record<string, { email: string; username: string }> = {};
+  for (const u of users) {
+    map[String(u.id)] = { email: u.email, username: u.username };
+  }
   return map;
 }
 
@@ -75,16 +62,15 @@ router.get("/admin/stats", requireAdminAuth, async (_req, res): Promise<void> =>
   res.json({ totalUsers, totalBots, activeBots, onlineBots, suspendedBots });
 });
 
-// ── All users with enriched Clerk data ───────────────────────────────────────
+// ── All users enriched from users table ──────────────────────────────────────
 router.get("/admin/users", requireAdminAuth, async (_req, res): Promise<void> => {
   const bots = await db.select().from(botsTable).orderBy(botsTable.createdAt);
-  const clerkData = await enrichWithClerkData(bots.map((b) => b.userId));
+  const userData = await enrichWithUserData(bots.map((b) => b.userId));
 
   const result = bots.map((bot) => ({
     ...bot,
-    email: clerkData[bot.userId]?.email ?? null,
-    firstName: clerkData[bot.userId]?.firstName ?? null,
-    lastName: clerkData[bot.userId]?.lastName ?? null,
+    email: userData[bot.userId]?.email ?? null,
+    username: userData[bot.userId]?.username ?? null,
   }));
 
   res.json(result);
@@ -110,7 +96,7 @@ router.post("/admin/bots/:id/deactivate", requireAdminAuth, async (req: any, res
   res.json(bot);
 });
 
-// ── Delete (wipes user completely: session, DB rows, Clerk account) ───────────
+// ── Delete user (wipes bot, session, DB rows, users table row) ────────────────
 router.delete("/admin/bots/:id", requireAdminAuth, async (req: any, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -118,27 +104,22 @@ router.delete("/admin/bots/:id", requireAdminAuth, async (req: any, res): Promis
   const [bot] = await db.select().from(botsTable).where(eq(botsTable.id, id)).limit(1);
   if (!bot) { res.status(404).json({ error: "Bot not found" }); return; }
 
-  // 1. Kill the active WhatsApp socket so the session closes cleanly
   try { await disconnectSession(bot.userId); } catch {}
 
-  // 2. Wipe all database rows for this user (child rows first)
   await db.delete(botCommandsTable).where(eq(botCommandsTable.botId, id));
   await db.delete(whatsappAuthTable).where(eq(whatsappAuthTable.userId, bot.userId));
   await db.delete(botsTable).where(eq(botsTable.id, id));
 
-  // 3. Delete the Clerk account so the user cannot log back in
-  try {
-    const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-    await clerk.users.deleteUser(bot.userId);
-  } catch (err: any) {
-    // Log but don't fail the request — DB rows are already gone
-    console.warn("[admin] Could not delete Clerk user:", err?.message ?? err);
+  // Delete from users table too
+  const numericUserId = Number(bot.userId);
+  if (!isNaN(numericUserId)) {
+    await db.delete(usersTable).where(eq(usersTable.id, numericUserId));
   }
 
   res.status(204).send();
 });
 
-// ── Legacy /admin/bots (kept for backward compat) ────────────────────────────
+// ── Legacy /admin/bots ────────────────────────────────────────────────────────
 router.get("/admin/bots", requireAdminAuth, async (_req, res): Promise<void> => {
   const bots = await db.select().from(botsTable).orderBy(botsTable.createdAt);
   res.json(bots);

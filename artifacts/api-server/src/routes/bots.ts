@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { getAuth } from "@clerk/express";
 import { db, botsTable } from "@workspace/db";
 import { UpdateMyBotBody } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/jwtMiddleware.js";
 import {
   requestQRCode,
   requestPairingCode,
@@ -13,18 +13,7 @@ import {
 
 const router: IRouter = Router();
 
-const requireAuth = (req: any, res: any, next: any) => {
-  const auth = getAuth(req);
-  const userId = auth?.sessionClaims?.userId || auth?.userId;
-  if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  req.userId = userId;
-  next();
-};
-
-async function getOrCreateBot(userId: string) {
+async function getOrCreateBot(userId: string, username?: string) {
   const existing = await db
     .select()
     .from(botsTable)
@@ -35,17 +24,17 @@ async function getOrCreateBot(userId: string) {
 
   const [bot] = await db
     .insert(botsTable)
-    .values({ userId, name: "My Bot", status: "offline" })
+    .values({ userId, name: username || "My Bot", status: "offline" })
     .returning();
 
   return bot;
 }
 
 // GET /api/bot — get (or auto-create) the user's single bot
-router.get("/bot", requireAuth, async (req: any, res): Promise<void> => {
+router.get("/bot", requireAuth, async (req, res): Promise<void> => {
   try {
-    const bot = await getOrCreateBot(req.userId);
-    const liveStatus = getSessionStatus(req.userId);
+    const bot = await getOrCreateBot(req.userId!, req.username);
+    const liveStatus = getSessionStatus(req.userId!);
     res.json({ ...bot, status: liveStatus === "offline" ? bot.status : liveStatus });
   } catch (err) {
     console.error("[bots] GET /bot error:", err);
@@ -54,14 +43,14 @@ router.get("/bot", requireAuth, async (req: any, res): Promise<void> => {
 });
 
 // PUT /api/bot — update bot settings
-router.put("/bot", requireAuth, async (req: any, res): Promise<void> => {
+router.put("/bot", requireAuth, async (req, res): Promise<void> => {
   const parsed = UpdateMyBotBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const bot = await getOrCreateBot(req.userId);
+  const bot = await getOrCreateBot(req.userId!, req.username);
 
   const [updated] = await db
     .update(botsTable)
@@ -69,20 +58,20 @@ router.put("/bot", requireAuth, async (req: any, res): Promise<void> => {
     .where(eq(botsTable.id, bot.id))
     .returning();
 
-  invalidateBotSettingsCache(req.userId);
+  invalidateBotSettingsCache(req.userId!);
   res.json(updated);
 });
 
 // GET /api/bot/qr — start session and get QR code for WhatsApp connection
-router.get("/bot/qr", requireAuth, async (req: any, res): Promise<void> => {
+router.get("/bot/qr", requireAuth, async (req, res): Promise<void> => {
   try {
-    const { qrCode, status } = await requestQRCode(req.userId);
+    const { qrCode, status } = await requestQRCode(req.userId!);
 
     if (status === "online") {
       await db
         .update(botsTable)
         .set({ status: "online" })
-        .where(eq(botsTable.userId, req.userId));
+        .where(eq(botsTable.userId, req.userId!));
       res.json({ status: "online", qrCode: null });
       return;
     }
@@ -90,7 +79,7 @@ router.get("/bot/qr", requireAuth, async (req: any, res): Promise<void> => {
     await db
       .update(botsTable)
       .set({ status: "connecting" })
-      .where(eq(botsTable.userId, req.userId));
+      .where(eq(botsTable.userId, req.userId!));
 
     res.json({ status: "connecting", qrCode });
   } catch (err: any) {
@@ -99,7 +88,7 @@ router.get("/bot/qr", requireAuth, async (req: any, res): Promise<void> => {
 });
 
 // POST /api/bot/pair — request pairing code via phone number
-router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
+router.post("/bot/pair", requireAuth, async (req, res): Promise<void> => {
   const { phoneNumber } = req.body;
   if (!phoneNumber) {
     res.status(400).json({ error: "phoneNumber is required" });
@@ -107,12 +96,12 @@ router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
   }
 
   try {
-    const code = await requestPairingCode(req.userId, phoneNumber);
+    const code = await requestPairingCode(req.userId!, phoneNumber);
 
     await db
       .update(botsTable)
       .set({ status: "connecting", phoneNumber })
-      .where(eq(botsTable.userId, req.userId));
+      .where(eq(botsTable.userId, req.userId!));
 
     res.json({ code });
   } catch (err: any) {
@@ -125,14 +114,14 @@ router.post("/bot/pair", requireAuth, async (req: any, res): Promise<void> => {
 });
 
 // POST /api/bot/disconnect — disconnect bot
-router.post("/bot/disconnect", requireAuth, async (req: any, res): Promise<void> => {
+router.post("/bot/disconnect", requireAuth, async (req, res): Promise<void> => {
   try {
-    await disconnectSession(req.userId);
+    await disconnectSession(req.userId!);
 
     const [updated] = await db
       .update(botsTable)
       .set({ status: "offline", phoneNumber: null })
-      .where(eq(botsTable.userId, req.userId))
+      .where(eq(botsTable.userId, req.userId!))
       .returning();
 
     res.json(updated);
