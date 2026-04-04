@@ -240,65 +240,130 @@ export async function stickerCommand(ctx: CommandContext) {
   }
 }
 
+// Extract contextInfo from any message type (text reply, image reply, etc.)
+function getQuotedContext(msg: import("@whiskeysockets/baileys").WAMessage) {
+  const m = msg.message;
+  return (
+    m?.extendedTextMessage?.contextInfo ??
+    m?.imageMessage?.contextInfo ??
+    m?.videoMessage?.contextInfo ??
+    m?.audioMessage?.contextInfo ??
+    m?.documentMessage?.contextInfo ??
+    m?.stickerMessage?.contextInfo ??
+    null
+  );
+}
+
+// Unwrap view-once wrapper and return { inner, image, video, audio }
+function unwrapViewOnce(quoted: Record<string, any> | null | undefined) {
+  if (!quoted) return null;
+  const inner: Record<string, any> | null | undefined =
+    quoted.viewOnceMessage?.message ??
+    quoted.viewOnceMessageV2?.message ??
+    quoted.viewOnceMessageV2Extension?.message;
+  if (!inner) return null;
+  return {
+    inner,
+    image: inner.imageMessage ?? null,
+    video: inner.videoMessage ?? null,
+    audio: inner.audioMessage ?? null,
+  };
+}
+
 export async function vvCommand(ctx: CommandContext) {
-  const quoted = ctx.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  const vvImage = quoted?.viewOnceMessage?.message?.imageMessage || quoted?.viewOnceMessageV2?.message?.imageMessage;
-  const vvVideo = quoted?.viewOnceMessage?.message?.videoMessage || quoted?.viewOnceMessageV2?.message?.videoMessage;
-  if (!vvImage && !vvVideo) {
-    return ctx.sock.sendMessage(ctx.jid, { text: `❓ Reply to a view-once message with ${ctx.prefix}vv to reveal it.` });
+  const ci = getQuotedContext(ctx.msg);
+  const vv = unwrapViewOnce(ci?.quotedMessage as any);
+
+  if (!vv || (!vv.image && !vv.video && !vv.audio)) {
+    return ctx.sock.sendMessage(ctx.jid, {
+      text: `❓ Reply to a view-once photo, video or audio with *${ctx.prefix}vv* to reveal it.`,
+    });
   }
+
   try {
-    const innerMsg = vvImage
-      ? { imageMessage: vvImage }
-      : { videoMessage: vvVideo };
-    const media = await downloadMediaMessage(
-      { key: ctx.msg.key, message: innerMsg } as any,
-      "buffer",
-      {}
-    );
-    if (vvImage) {
-      await ctx.sock.sendMessage(ctx.jid, { image: media as Buffer, caption: `👁️ *View-Once Revealed*\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_` });
+    // Use the original message key so Baileys fetches from the right node
+    const fakeMsg = {
+      key: {
+        remoteJid: ctx.jid,
+        fromMe: false,
+        id: ci!.stanzaId!,
+        participant: ci!.participant,
+      },
+      message: vv.image
+        ? { imageMessage: vv.image }
+        : vv.video
+        ? { videoMessage: vv.video }
+        : { audioMessage: vv.audio },
+    };
+
+    const media = await downloadMediaMessage(fakeMsg as any, "buffer", {});
+
+    if (vv.image) {
+      await ctx.sock.sendMessage(ctx.jid, {
+        image: media as Buffer,
+        caption: `👁️ *View-Once Revealed*\n\n_By *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
+      });
+    } else if (vv.video) {
+      await ctx.sock.sendMessage(ctx.jid, {
+        video: media as Buffer,
+        caption: `👁️ *View-Once Revealed*\n\n_By *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
+      });
     } else {
-      await ctx.sock.sendMessage(ctx.jid, { video: media as Buffer, caption: `👁️ *View-Once Revealed*\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_` });
+      await ctx.sock.sendMessage(ctx.jid, {
+        audio: media as Buffer,
+        mimetype: (vv.audio?.mimetype as string) || "audio/ogg; codecs=opus",
+        ptt: (vv.audio?.ptt as boolean) ?? true,
+      });
     }
-  } catch {
-    await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to reveal view-once message." });
+  } catch (e) {
+    console.error("[vv]", e);
+    await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to reveal view-once. The media may have expired." });
   }
 }
 
 export async function vv2Command(ctx: CommandContext) {
-  const quoted = ctx.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  const vvImage = quoted?.viewOnceMessage?.message?.imageMessage || quoted?.viewOnceMessageV2?.message?.imageMessage;
-  const vvVideo = quoted?.viewOnceMessage?.message?.videoMessage || quoted?.viewOnceMessageV2?.message?.videoMessage;
-  if (!vvImage && !vvVideo) {
-    return ctx.sock.sendMessage(ctx.jid, { text: `❓ Reply to a view-once message with ${ctx.prefix}vv2 to send it to owner DM.` });
+  const ci = getQuotedContext(ctx.msg);
+  const vv = unwrapViewOnce(ci?.quotedMessage as any);
+
+  if (!vv || (!vv.image && !vv.video && !vv.audio)) {
+    return ctx.sock.sendMessage(ctx.jid, {
+      text: `❓ Reply to a view-once message with *${ctx.prefix}vv2* to forward it privately to the owner.`,
+    });
   }
+
   try {
-    const innerMsg = vvImage
-      ? { imageMessage: vvImage }
-      : { videoMessage: vvVideo };
-    const media = await downloadMediaMessage(
-      { key: ctx.msg.key, message: innerMsg } as any,
-      "buffer",
-      {}
-    );
-    // Send to owner DM
+    const fakeMsg = {
+      key: {
+        remoteJid: ctx.jid,
+        fromMe: false,
+        id: ci!.stanzaId!,
+        participant: ci!.participant,
+      },
+      message: vv.image
+        ? { imageMessage: vv.image }
+        : vv.video
+        ? { videoMessage: vv.video }
+        : { audioMessage: vv.audio },
+    };
+
+    const media = await downloadMediaMessage(fakeMsg as any, "buffer", {});
     const ownerJid = ctx.botJid.split(":")[0] + "@s.whatsapp.net";
-    if (vvImage) {
-      await ctx.sock.sendMessage(ownerJid, {
-        image: media as Buffer,
-        caption: `👁️ *View-Once (VV2)*\n\n📍 From: @${ctx.senderJid.split("@")[0]}\n💬 Chat: ${ctx.jid}\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
-        mentions: [ctx.senderJid],
-      });
+    const tag = `👁️ *View-Once (VV2)*\n\n📍 From: @${ctx.senderJid.split("@")[0]}\n💬 Chat: ${ctx.jid}\n\n_By *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`;
+
+    if (vv.image) {
+      await ctx.sock.sendMessage(ownerJid, { image: media as Buffer, caption: tag, mentions: [ctx.senderJid] });
+    } else if (vv.video) {
+      await ctx.sock.sendMessage(ownerJid, { video: media as Buffer, caption: tag, mentions: [ctx.senderJid] });
     } else {
       await ctx.sock.sendMessage(ownerJid, {
-        video: media as Buffer,
-        caption: `👁️ *View-Once (VV2)*\n\n📍 From: @${ctx.senderJid.split("@")[0]}\n💬 Chat: ${ctx.jid}\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
-        mentions: [ctx.senderJid],
+        audio: media as Buffer,
+        mimetype: (vv.audio?.mimetype as string) || "audio/ogg; codecs=opus",
+        ptt: (vv.audio?.ptt as boolean) ?? true,
       });
     }
-    await ctx.sock.sendMessage(ctx.jid, { text: "✅ View-once sent to owner DM." });
-  } catch {
+    await ctx.sock.sendMessage(ctx.jid, { text: "✅ View-once forwarded to owner DM." });
+  } catch (e) {
+    console.error("[vv2]", e);
     await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to retrieve view-once message." });
   }
 }

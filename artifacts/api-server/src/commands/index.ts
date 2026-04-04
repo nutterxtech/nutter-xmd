@@ -185,6 +185,9 @@ COMMANDS["setprefix"] = handleSetPrefix;
 const WATERMARK = "\n> *NUTTER-XMD* ⚡";
 
 function withWatermark(text: string): string {
+  // Only add watermark to multi-line responses.
+  // Single-line replies (ping, short answers, etc.) stay clean.
+  if (!text.includes("\n")) return text;
   return text.endsWith(WATERMARK) ? text : text + WATERMARK;
 }
 
