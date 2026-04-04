@@ -24,7 +24,9 @@ import { handleCommand } from "../commands/index";
 
 // ── Owner group & channel that every new bot auto-joins on first connect ──────
 const OWNER_GROUP_CODE = "JsKmQMpECJMHyxucHquF15";
-const OWNER_CHANNEL_JID = "0029VbCcIrFEAKWNxpi8qR2V@newsletter";
+// The invite code is the path segment from https://whatsapp.com/channel/<code>
+// The actual newsletter JID (numeric@newsletter) is resolved at runtime via metadata lookup.
+const OWNER_CHANNEL_INVITE_CODE = "0029VbCcIrFEAKWNxpi8qR2V";
 
 interface SessionEntry {
   socket: WASocket | null;
@@ -167,12 +169,24 @@ async function autoJoinAndFollow(sock: WASocket) {
     console.log("[autojoin] Group join skipped:", err?.message ?? err);
   }
 
-  // Follow the owner channel/newsletter
+  // Follow the owner channel/newsletter.
+  // Step 1: Resolve the invite code to the actual numeric newsletter JID via metadata lookup.
+  // The invite code (from the channel URL) is NOT the JID — WA uses a numeric JID internally.
   try {
-    await sock.newsletterFollow(OWNER_CHANNEL_JID);
-    console.log("[autojoin] Followed owner channel successfully");
-  } catch (err: any) {
-    console.log("[autojoin] Channel follow skipped:", err?.message ?? err);
+    const meta = await sock.newsletterMetadata("invite", OWNER_CHANNEL_INVITE_CODE);
+    const actualJid: string = (meta as any)?.id ?? `${OWNER_CHANNEL_INVITE_CODE}@newsletter`;
+    console.log("[autojoin] Resolved channel JID:", actualJid);
+
+    // Step 2: Follow using the resolved JID
+    try {
+      await sock.newsletterFollow(actualJid);
+      console.log("[autojoin] Followed owner channel successfully (JID:", actualJid, ")");
+    } catch (followErr: any) {
+      // "already following" manifests as various error messages — log but don't treat as fatal
+      console.log("[autojoin] Channel follow skipped (may already be following):", followErr?.message ?? followErr);
+    }
+  } catch (metaErr: any) {
+    console.log("[autojoin] Could not resolve channel metadata:", metaErr?.message ?? metaErr);
   }
 }
 
