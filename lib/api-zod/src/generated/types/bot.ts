@@ -34,6 +34,8 @@ export interface Bot {
   autoStatus: boolean;
   autoViewStatus: boolean;
   autoLikeStatus: boolean;
+  antiDelete: boolean;
+  statusLikeEmoji?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

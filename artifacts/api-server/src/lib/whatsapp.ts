@@ -92,6 +92,8 @@ async function getBotSettings(userId: string) {
       goodbyeMessage: bot?.goodbyeMessage ?? false,
       autoViewStatus: bot?.autoViewStatus ?? false,
       autoLikeStatus: bot?.autoLikeStatus ?? false,
+      statusLikeEmoji: bot?.statusLikeEmoji ?? "❤️",
+      antiDelete: bot?.antiDelete ?? false,
     };
   } catch (err) {
     console.error("[whatsapp] getBotSettings error:", err);
@@ -101,8 +103,29 @@ async function getBotSettings(userId: string) {
       antiSticker: false, antiTag: false, antiBadWord: false, badWords: "",
       autoReply: false, autoReplyMessage: "", welcomeMessage: false,
       goodbyeMessage: false, autoViewStatus: false, autoLikeStatus: false,
+      statusLikeEmoji: "❤️", antiDelete: false,
     };
   }
+}
+
+// ─── Per-session message cache for antidelete ─────────────────────────────────
+// Stores the last N messages per userId so deleted messages can be forwarded to owner.
+const msgCaches = new Map<string, Map<string, import("@whiskeysockets/baileys").WAMessage>>();
+const MSG_CACHE_MAX = 200;
+
+function cacheMsg(userId: string, msg: import("@whiskeysockets/baileys").WAMessage) {
+  if (!msgCaches.has(userId)) msgCaches.set(userId, new Map());
+  const cache = msgCaches.get(userId)!;
+  const key = `${msg.key.remoteJid}::${msg.key.id}`;
+  cache.set(key, msg);
+  if (cache.size > MSG_CACHE_MAX) {
+    const first = cache.keys().next().value;
+    if (first !== undefined) cache.delete(first);
+  }
+}
+
+function getCachedMsg(userId: string, remoteJid: string, id: string) {
+  return msgCaches.get(userId)?.get(`${remoteJid}::${id}`) ?? null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -527,8 +550,9 @@ async function startSocket(
           }
           if (settings.autoLikeStatus && msg.key.participant) {
             try {
+              const emoji = settings.statusLikeEmoji || "❤️";
               await sock.sendMessage(msg.key.participant, {
-                react: { text: "❤️", key: { ...msg.key, remoteJid: "status@broadcast" } },
+                react: { text: emoji, key: { ...msg.key, remoteJid: "status@broadcast" } },
               });
             } catch {}
           }
@@ -542,14 +566,60 @@ async function startSocket(
           continue;
         }
 
-        // ── Skip protocol messages ────────────────────────────────────────────
         const m = msg.message;
-        if (
-          m.protocolMessage ||
-          m.reactionMessage ||
-          m.pollUpdateMessage ||
-          m.keepInChatMessage
-        ) continue;
+
+        // ── Anti-delete: intercept REVOKE protocol messages ───────────────────
+        if (m.protocolMessage) {
+          // type 0 = REVOKE (someone deleted a message)
+          if (m.protocolMessage.type === 0) {
+            const { antiDelete } = await getBotSettings(userId);
+            if (antiDelete && m.protocolMessage.key) {
+              const rKey = m.protocolMessage.key;
+              const ownerJid = (sock.user?.id ?? "").split(":")[0] + "@s.whatsapp.net";
+              const deleterJid = msg.key.fromMe
+                ? (sock.user?.id ?? "")
+                : (msg.key.participant ?? msg.key.remoteJid ?? "");
+              const cachedMsg = getCachedMsg(userId, rKey.remoteJid ?? jid, rKey.id ?? "");
+              const originalBody =
+                cachedMsg?.message?.conversation ||
+                cachedMsg?.message?.extendedTextMessage?.text ||
+                cachedMsg?.message?.imageMessage?.caption ||
+                cachedMsg?.message?.videoMessage?.caption ||
+                cachedMsg?.message?.documentMessage?.caption ||
+                null;
+              const inGroup = jid.endsWith("@g.us");
+              try {
+                if (originalBody) {
+                  await sock.sendMessage(ownerJid, {
+                    text:
+                      `🔥 *NUTTER-XMD ANTIDELETE* 🔥\n\n` +
+                      `🗑️ *Deleted by:* @${deleterJid.split("@")[0]}\n` +
+                      (inGroup ? `📍 *Group:* ${jid}\n` : "") +
+                      `\n📝 *Message:*\n${originalBody}`,
+                    mentions: [deleterJid],
+                  });
+                } else {
+                  await sock.sendMessage(ownerJid, {
+                    text:
+                      `🔥 *NUTTER-XMD ANTIDELETE* 🔥\n\n` +
+                      `🗑️ *Deleted by:* @${deleterJid.split("@")[0]}\n` +
+                      (inGroup ? `📍 *Group:* ${jid}\n` : "") +
+                      `\n⚠️ _Message content not cached (media or recent)_`,
+                    mentions: [deleterJid],
+                  });
+                }
+              } catch {}
+            }
+          }
+          continue;
+        }
+
+        if (m.reactionMessage || m.pollUpdateMessage || m.keepInChatMessage) continue;
+
+        // ── Cache message for antidelete ──────────────────────────────────────
+        if (!msg.key.fromMe) {
+          cacheMsg(userId, msg);
+        }
 
         const settings = await getBotSettings(userId);
         const isGroup = jid.endsWith("@g.us");

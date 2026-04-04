@@ -22,7 +22,8 @@ export const botsTable = pgTable("bots", {
   antiSticker: boolean("anti_sticker").notNull().default(false),
   antiTag: boolean("anti_tag").notNull().default(false),
   antiBadWord: boolean("anti_bad_word").notNull().default(false),
-  badWords: text("bad_words"),  // comma-separated list set by owner
+  antiDelete: boolean("anti_delete").notNull().default(false),
+  badWords: text("bad_words"),
   welcomeMessage: boolean("welcome_message").notNull().default(false),
   goodbyeMessage: boolean("goodbye_message").notNull().default(false),
   autoRead: boolean("auto_read").notNull().default(false),
@@ -31,6 +32,7 @@ export const botsTable = pgTable("bots", {
   autoStatus: boolean("auto_status").notNull().default(false),
   autoViewStatus: boolean("auto_view_status").notNull().default(false),
   autoLikeStatus: boolean("auto_like_status").notNull().default(false),
+  statusLikeEmoji: text("status_like_emoji").notNull().default("❤️"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

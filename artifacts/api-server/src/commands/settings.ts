@@ -15,12 +15,6 @@ function onOff(v: boolean | null | undefined) {
   return v ? "ON ✅" : "OFF ❌";
 }
 
-/**
- * Parse `on`/`off` from first arg, or toggle the current value.
- * `!cmd on`  → true
- * `!cmd off` → false
- * `!cmd`     → !current (toggle)
- */
 function resolveOnOff(arg: string | undefined, current: boolean): boolean {
   if (arg === "on") return true;
   if (arg === "off") return false;
@@ -43,7 +37,8 @@ export async function getsettingsCommand(ctx: CommandContext) {
         `${onOff(bot.antiSticker)} Anti Sticker\n` +
         `${onOff(bot.antiTag)} Anti Tag\n` +
         `${onOff(bot.antiBadWord)} Anti Bad Word\n` +
-        `${onOff(bot.antiSpam)} Anti Spam\n\n` +
+        `${onOff(bot.antiSpam)} Anti Spam\n` +
+        `${onOff(bot.antiDelete)} Anti Delete\n\n` +
         `*── Group ──*\n` +
         `${onOff(bot.welcomeMessage)} Welcome Message\n` +
         `${onOff(bot.goodbyeMessage)} Goodbye Message\n\n` +
@@ -54,7 +49,8 @@ export async function getsettingsCommand(ctx: CommandContext) {
         `${onOff(bot.typingStatus)} Typing Indicator\n` +
         `${onOff(bot.alwaysOnline)} Always Online\n` +
         `${onOff(bot.autoViewStatus)} Auto View Status\n` +
-        `${onOff(bot.autoLikeStatus)} Auto Like Status\n\n` +
+        `${onOff(bot.autoLikeStatus)} Auto Like Status\n` +
+        `❤️ Status Like Emoji: ${bot.statusLikeEmoji ?? "❤️"}\n\n` +
         `╚══════════════════╝\n\n` +
         `_Use_ \`${bot.prefix}<setting> on/off\` _to toggle any feature_\n` +
         `_Example:_ \`${bot.prefix}anticall on\``,
@@ -202,11 +198,18 @@ export async function autoreadCommand(ctx: CommandContext) {
   });
 }
 
-// ── Anti delete (placeholder) ─────────────────────────────────────────────────
+// ── Anti delete ───────────────────────────────────────────────────────────────
 export async function antideleteCommand(ctx: CommandContext) {
   if (!ctx.isOwner) return ctx.sock.sendMessage(ctx.jid, { text: "❌ Owner only command." });
+  const bot = await getBot(ctx.userId);
+  const newVal = resolveOnOff(ctx.args[0], bot?.antiDelete ?? false);
+  await updateBot(ctx.userId, { antiDelete: newVal });
   await ctx.sock.sendMessage(ctx.jid, {
-    text: "🛡️ Anti Delete can be toggled from the bot dashboard Settings tab.",
+    text:
+      `🛡️ *Anti Delete* is now *${onOff(newVal)}*\n\n` +
+      (newVal
+        ? `_Deleted messages will be forwarded to your DM._`
+        : `_Anti delete disabled._`),
   });
 }
 
@@ -246,7 +249,18 @@ export async function autolikestatusCommand(ctx: CommandContext) {
   await ctx.sock.sendMessage(ctx.jid, {
     text:
       `❤️ *Auto Like Status* is now *${onOff(newVal)}*\n\n` +
-      (newVal ? `_Bot will react ❤️ to all contacts' status updates._` : `_Status auto-like disabled._`),
+      (newVal ? `_Bot will react ${bot?.statusLikeEmoji ?? "❤️"} to all contacts' status updates._` : `_Status auto-like disabled._`),
+  });
+}
+
+// ── Set status emoji ──────────────────────────────────────────────────────────
+export async function setlikeemojiCommand(ctx: CommandContext) {
+  if (!ctx.isOwner) return ctx.sock.sendMessage(ctx.jid, { text: "❌ Owner only command." });
+  const emoji = ctx.argText.trim();
+  if (!emoji) return ctx.sock.sendMessage(ctx.jid, { text: `❓ Usage: ${ctx.prefix}setlikeemoji <emoji>\nExample: ${ctx.prefix}setlikeemoji 🔥` });
+  await updateBot(ctx.userId, { statusLikeEmoji: emoji });
+  await ctx.sock.sendMessage(ctx.jid, {
+    text: `✅ Status like emoji set to: ${emoji}`,
   });
 }
 

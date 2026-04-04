@@ -43,6 +43,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "antiTag",     label: "Anti Tag",     description: "Delete mass-mention messages (5+ people tagged at once)", icon: Tag,       category: "Protection", note: "Requires bot to be group admin" },
   { key: "antiBadWord", label: "Anti Bad Word", description: "Delete message + kick the sender for using bad words", icon: Swords,    category: "Protection", note: "Requires bot to be group admin" },
   { key: "antiSpam",    label: "Anti Spam",    description: "Automatically detect and remove spam messages", icon: Shield,    category: "Protection" },
+  { key: "antiDelete",  label: "Anti Delete",  description: "Forward deleted messages to your DM so nothing is lost", icon: Shield,    category: "Protection" },
   // Group
   { key: "welcomeMessage", label: "Welcome Message", description: "Greet new members with their profile picture and a caption", icon: UserCheck, category: "Group" },
   { key: "goodbyeMessage", label: "Goodbye Message",  description: "Send a farewell message when members leave", icon: LogOut,    category: "Group" },
@@ -79,6 +80,7 @@ export default function Dashboard() {
   const [autoReplyMsg, setAutoReplyMsg] = useState("");
   const [prefixInput, setPrefixInput] = useState("");
   const [newBadWord, setNewBadWord] = useState("");
+  const [likeEmoji, setLikeEmoji] = useState("");
 
   const handleToggleFeature = (key: string, value: boolean) => {
     updateBot.mutate(
@@ -191,6 +193,24 @@ export default function Dashboard() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
           toast({ title: "Auto-reply message saved" });
+        },
+        onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+      }
+    );
+  };
+
+  const handleSaveLikeEmoji = () => {
+    const emoji = likeEmoji.trim();
+    if (!emoji) {
+      toast({ title: "Please enter an emoji", variant: "destructive" });
+      return;
+    }
+    updateBot.mutate(
+      { data: { statusLikeEmoji: emoji } as any },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
+          toast({ title: `Status like emoji set to ${emoji}` });
         },
         onError: () => toast({ title: "Failed to save", variant: "destructive" }),
       }
@@ -648,6 +668,25 @@ export default function Dashboard() {
                                   <Save className="w-3.5 h-3.5 mr-1.5" />
                                   Save Message
                                 </Button>
+                              </div>
+                            )}
+
+                            {/* Status like emoji */}
+                            {feature.key === "autoLikeStatus" && value && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs text-muted-foreground">Custom emoji for status reactions (default: ❤️)</p>
+                                <div className="flex gap-2">
+                                  <Input
+                                    placeholder={`Current: ${(bot as any)?.statusLikeEmoji ?? "❤️"}`}
+                                    value={likeEmoji}
+                                    onChange={(e) => setLikeEmoji(e.target.value)}
+                                    className="bg-secondary/50 border-border/50 focus:border-primary/50 text-sm max-w-[120px]"
+                                  />
+                                  <Button size="sm" variant="outline" onClick={handleSaveLikeEmoji} disabled={updateBot.isPending}>
+                                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                                    Save
+                                  </Button>
+                                </div>
                               </div>
                             )}
 

@@ -2,6 +2,8 @@ import QRCode from "qrcode";
 import axios from "axios";
 import { execSync } from "child_process";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import { readFileSync } from "fs";
+import { join } from "path";
 import type { CommandContext } from "./context";
 
 let startTime = Date.now();
@@ -36,6 +38,20 @@ function formatDuration(ms: number): string {
   if (h > 0) return `${h}h ${m % 60}m ${s % 60}s`;
   if (m > 0) return `${m}m ${s % 60}s`;
   return `${s}s`;
+}
+
+function loadBanner(): Buffer | null {
+  try {
+    const assetPath = join(__dirname, "../assets/menu-banner.jpg");
+    return readFileSync(assetPath);
+  } catch {
+    try {
+      const distPath = join(process.cwd(), "dist/assets/menu-banner.jpg");
+      return readFileSync(distPath);
+    } catch {
+      return null;
+    }
+  }
 }
 
 export async function pingCommand(ctx: CommandContext) {
@@ -235,13 +251,78 @@ export async function vvCommand(ctx: CommandContext) {
       {}
     );
     if (vvImage) {
-      await ctx.sock.sendMessage(ctx.jid, { image: media as Buffer, caption: "👁️ *View-Once Revealed*" });
+      await ctx.sock.sendMessage(ctx.jid, { image: media as Buffer, caption: `👁️ *View-Once Revealed*\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_` });
     } else {
-      await ctx.sock.sendMessage(ctx.jid, { video: media as Buffer, caption: "👁️ *View-Once Revealed*" });
+      await ctx.sock.sendMessage(ctx.jid, { video: media as Buffer, caption: `👁️ *View-Once Revealed*\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_` });
     }
   } catch {
     await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to reveal view-once message." });
   }
+}
+
+export async function vv2Command(ctx: CommandContext) {
+  const quoted = ctx.msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+  const vvImage = quoted?.viewOnceMessage?.message?.imageMessage || quoted?.viewOnceMessageV2?.message?.imageMessage;
+  const vvVideo = quoted?.viewOnceMessage?.message?.videoMessage || quoted?.viewOnceMessageV2?.message?.videoMessage;
+  if (!vvImage && !vvVideo) {
+    return ctx.sock.sendMessage(ctx.jid, { text: `❓ Reply to a view-once message with ${ctx.prefix}vv2 to send it to owner DM.` });
+  }
+  try {
+    const innerMsg = vvImage
+      ? { imageMessage: vvImage }
+      : { videoMessage: vvVideo };
+    const media = await downloadMediaMessage(
+      { key: ctx.msg.key, message: innerMsg } as any,
+      "buffer",
+      {}
+    );
+    // Send to owner DM
+    const ownerJid = ctx.botJid.split(":")[0] + "@s.whatsapp.net";
+    if (vvImage) {
+      await ctx.sock.sendMessage(ownerJid, {
+        image: media as Buffer,
+        caption: `👁️ *View-Once (VV2)*\n\n📍 From: @${ctx.senderJid.split("@")[0]}\n💬 Chat: ${ctx.jid}\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
+        mentions: [ctx.senderJid],
+      });
+    } else {
+      await ctx.sock.sendMessage(ownerJid, {
+        video: media as Buffer,
+        caption: `👁️ *View-Once (VV2)*\n\n📍 From: @${ctx.senderJid.split("@")[0]}\n💬 Chat: ${ctx.jid}\n\n_Retrieved by *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡_`,
+        mentions: [ctx.senderJid],
+      });
+    }
+    await ctx.sock.sendMessage(ctx.jid, { text: "✅ View-once sent to owner DM." });
+  } catch {
+    await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to retrieve view-once message." });
+  }
+}
+
+export async function testCommand(ctx: CommandContext) {
+  const uptime = formatDuration(Date.now() - startTime);
+  const mem = process.memoryUsage();
+  const memUsed = Math.round(mem.heapUsed / 1024 / 1024);
+  const ping = Date.now();
+
+  const caption =
+    `╔══[ 🤖 *NUTTER-XMD STATUS* ]══╗\n\n` +
+    `🟢 *Status:* Online & Active\n` +
+    `⏱️ *Uptime:* ${uptime}\n` +
+    `💾 *Memory:* ${memUsed}MB\n` +
+    `📡 *Server:* Running\n` +
+    `🔋 *Health:* Excellent\n\n` +
+    `╚══════════════════╝\n\n` +
+    `> *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* is alive and ready! ⚡`;
+
+  const banner = loadBanner();
+  if (banner) {
+    await ctx.sock.sendMessage(ctx.jid, { image: banner, caption });
+  } else {
+    await ctx.sock.sendMessage(ctx.jid, { text: caption });
+  }
+}
+
+export async function aliveCommand(ctx: CommandContext) {
+  return testCommand(ctx);
 }
 
 export async function pairCommand(ctx: CommandContext) {

@@ -33,4 +33,6 @@ export interface UpdateBotBody {
   autoStatus?: boolean;
   autoViewStatus?: boolean;
   autoLikeStatus?: boolean;
+  antiDelete?: boolean;
+  statusLikeEmoji?: string;
 }

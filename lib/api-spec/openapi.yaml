@@ -332,6 +332,14 @@ components:
           type: boolean
         autoStatus:
           type: boolean
+        autoViewStatus:
+          type: boolean
+        autoLikeStatus:
+          type: boolean
+        antiDelete:
+          type: boolean
+        statusLikeEmoji:
+          type: string
 
     QRData:
       type: object

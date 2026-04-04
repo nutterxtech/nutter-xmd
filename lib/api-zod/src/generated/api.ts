@@ -40,6 +40,8 @@ const BotShape = {
   autoStatus: zod.boolean(),
   autoViewStatus: zod.boolean(),
   autoLikeStatus: zod.boolean(),
+  antiDelete: zod.boolean(),
+  statusLikeEmoji: zod.string().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 };
@@ -76,6 +78,8 @@ export const UpdateMyBotBody = zod.object({
   autoStatus: zod.boolean().optional(),
   autoViewStatus: zod.boolean().optional(),
   autoLikeStatus: zod.boolean().optional(),
+  antiDelete: zod.boolean().optional(),
+  statusLikeEmoji: zod.string().optional(),
 });
 
 export const UpdateMyBotResponse = zod.object(BotShape);

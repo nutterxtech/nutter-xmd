@@ -115,6 +115,9 @@ export async function menuCommand(ctx: CommandContext) {
     `││◦➛ ${p}repo\n` +
     `││◦➛ ${p}botstatus\n` +
     `││◦➛ ${p}vv\n` +
+    `││◦➛ ${p}vv2\n` +
+    `││◦➛ ${p}test\n` +
+    `││◦➛ ${p}alive\n` +
     `││◦➛ ${p}pair\n` +
     `╰──────────────┈⊷\n\n` +
 
@@ -123,6 +126,7 @@ export async function menuCommand(ctx: CommandContext) {
     `││◦➛ ${p}promote\n` +
     `││◦➛ ${p}demote\n` +
     `││◦➛ ${p}add\n` +
+    `││◦➛ ${p}approve\n` +
     `││◦➛ ${p}invite\n` +
     `││◦➛ ${p}open\n` +
     `││◦➛ ${p}close\n` +
@@ -147,6 +151,7 @@ export async function menuCommand(ctx: CommandContext) {
     `││◦➛ ${p}autolikestatus\n` +
     `││◦➛ ${p}autotype\n` +
     `││◦➛ ${p}antidelete\n` +
+    `││◦➛ ${p}setlikeemoji\n` +
     `││◦➛ ${p}mode\n` +
     `││◦➛ ${p}setprefix\n` +
     `││◦➛ ${p}setwelcome\n` +

@@ -11,7 +11,10 @@ export async function blockCommand(ctx: CommandContext) {
   if (!target) return ctx.sock.sendMessage(ctx.jid, { text: `❓ Usage: ${ctx.prefix}block @user or ${ctx.prefix}block <number>` });
   try {
     await ctx.sock.updateBlockStatus(target, "block");
-    await ctx.sock.sendMessage(ctx.jid, { text: `🚫 Blocked @${target.split("@")[0]}`, mentions: [target] });
+    await ctx.sock.sendMessage(ctx.jid, {
+      text: `🚫 Blocked @${target.split("@")[0]}\n\n_by_ *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡`,
+      mentions: [target],
+    });
   } catch {
     await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to block." });
   }
