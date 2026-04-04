@@ -259,6 +259,36 @@ async function startSocket(
   const { state, saveCreds } = await useDatabaseAuthState(userId);
   const { version } = await fetchLatestBaileysVersion();
 
+  // In pairing mode use a real logger at "warn" level so protocol errors from
+  // WhatsApp (e.g. rejected link_code_companion_reg) are visible in the logs.
+  const baileysLogger = entry.pairingMode
+    ? {
+        level: "info",
+        trace: () => {},
+        debug: () => {},
+        info: (obj: any, msg?: string) => console.log(`[baileys:info][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+        warn: (obj: any, msg?: string) => console.log(`[baileys:warn][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+        error: (obj: any, msg?: string) => console.error(`[baileys:error][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+        fatal: (obj: any, msg?: string) => console.error(`[baileys:fatal][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+        child: () => ({
+          level: "info", trace: () => {}, debug: () => {},
+          info: (obj: any, msg?: string) => console.log(`[baileys:info][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+          warn: (obj: any, msg?: string) => console.log(`[baileys:warn][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+          error: (obj: any, msg?: string) => console.error(`[baileys:error][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+          fatal: (obj: any, msg?: string) => console.error(`[baileys:fatal][${userId}]`, msg ?? "", typeof obj === "object" ? JSON.stringify(obj).slice(0, 300) : obj),
+          child: () => ({} as any),
+        }),
+      }
+    : {
+        level: "silent",
+        trace: () => {}, debug: () => {}, info: () => {},
+        warn: () => {}, error: () => {}, fatal: () => {},
+        child: () => ({
+          level: "silent", trace: () => {}, debug: () => {}, info: () => {},
+          warn: () => {}, error: () => {}, fatal: () => {}, child: () => ({} as any),
+        }),
+      };
+
   const sock = makeWASocket({
     version,
     auth: state,
@@ -274,15 +304,7 @@ async function startSocket(
     getMessage: async () => undefined,
     // Keep the connection alive — prevents idle drops
     keepAliveIntervalMs: 30_000,
-    logger: {
-      level: "silent",
-      trace: () => {}, debug: () => {}, info: () => {},
-      warn: () => {}, error: () => {}, fatal: () => {},
-      child: () => ({
-        level: "silent", trace: () => {}, debug: () => {}, info: () => {},
-        warn: () => {}, error: () => {}, fatal: () => {}, child: () => ({} as any),
-      }),
-    } as any,
+    logger: baileysLogger as any,
   });
 
   entry.socket = sock;
@@ -727,11 +749,14 @@ export async function requestPairingCode(userId: string, phoneNumber: string) {
   });
 
   try {
+    console.log(`[pairing] Calling requestPairingCode for userId=${userId} phone=${cleanPhone}`);
     const raw = await sock.requestPairingCode(cleanPhone);
     // Format as XXXX-XXXX for clarity (Baileys returns 8 chars without dash)
     const code = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
+    console.log(`[pairing] Code generated for userId=${userId}: ${code} (raw=${raw}). Waiting for user to enter on phone…`);
     return code;
   } catch (err: any) {
+    console.error(`[pairing] requestPairingCode FAILED for userId=${userId}:`, err);
     // Clean up on failure
     entry.socket = null;
     entry.status = "offline";
