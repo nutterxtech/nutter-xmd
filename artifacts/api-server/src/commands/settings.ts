@@ -100,7 +100,7 @@ export async function antitagCommand(ctx: CommandContext) {
   const newVal = resolveOnOff(ctx.args[0], bot?.antiTag ?? false);
   await updateBot(ctx.userId, { antiTag: newVal });
   await ctx.sock.sendMessage(ctx.jid, {
-    text: `🏷️ *Anti Tag* is now *${onOff(newVal)}*\n\n_${newVal ? "Mass-mention messages (5+ tags) will be deleted (bot must be admin)." : "Tagging is now allowed."}_`,
+    text: `🏷️ *Anti Tag* is now *${onOff(newVal)}*\n\n_${newVal ? "Anyone who tags/mentions a member in this group will be deleted and kicked immediately (bot must be admin)." : "Anti-tag disabled."}_`,
   });
 }
 

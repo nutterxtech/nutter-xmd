@@ -152,6 +152,19 @@ async function isBotAdmin(sock: WASocket, groupJid: string, botJid: string) {
   }
 }
 
+async function isParticipantAdmin(sock: WASocket, groupJid: string, participantJid: string) {
+  try {
+    const { participants } = await sock.groupMetadata(groupJid);
+    const pNum = participantJid.split(":")[0].replace(/[^0-9]/g, "");
+    const p = participants.find(
+      (x) => x.id.split(":")[0].replace(/[^0-9]/g, "") === pNum
+    );
+    return p?.admin === "admin" || p?.admin === "superadmin";
+  } catch {
+    return false;
+  }
+}
+
 function jidFromPhone(phoneOrJid: string) {
   const clean = phoneOrJid.split(":")[0].replace(/[^0-9]/g, "");
   return `${clean}@s.whatsapp.net`;
@@ -681,13 +694,29 @@ async function startSocket(
           }
 
           if (settings.antiTag) {
-            const mentionedJids = m.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
-            if (mentionedJids.length >= 5) {
-              const isAdmin = await isBotAdmin(sock, jid, botJid);
-              if (isAdmin) {
+            // Collect mentions from all possible message types
+            const mentionedJids: string[] = [
+              ...(m.extendedTextMessage?.contextInfo?.mentionedJid ?? []),
+              ...(m.imageMessage?.contextInfo?.mentionedJid ?? []),
+              ...(m.videoMessage?.contextInfo?.mentionedJid ?? []),
+              ...(m.documentMessage?.contextInfo?.mentionedJid ?? []),
+              ...(m.audioMessage?.contextInfo?.mentionedJid ?? []),
+            ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+
+            if (mentionedJids.length >= 1) {
+              const isBotAdm = await isBotAdmin(sock, jid, botJid);
+              if (isBotAdm) {
+                // Don't kick group admins — just delete their message silently
+                const senderIsAdmin = await isParticipantAdmin(sock, jid, senderJid);
                 try {
                   await sock.sendMessage(jid, { delete: msg.key });
-                  await sock.sendMessage(jid, { text: "🚫 *Mass tagging is not allowed in this group.*" });
+                  if (!senderIsAdmin) {
+                    await sock.sendMessage(jid, {
+                      text: `🚫 @${senderJid.split("@")[0]} *was removed for tagging members.*\n_by_ *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* ⚡`,
+                      mentions: [senderJid],
+                    });
+                    await sock.groupParticipantsUpdate(jid, [senderJid], "remove");
+                  }
                 } catch {}
                 continue;
               }

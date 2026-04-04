@@ -40,7 +40,7 @@ const FEATURE_TOGGLES: FeatureToggle[] = [
   { key: "antiCall",    label: "Anti Call",    description: "Reject incoming voice/video calls and notify the caller", icon: BellOff,   category: "Protection" },
   { key: "antiLink",    label: "Anti Link",    description: "Delete messages containing links in groups (bot must be admin)", icon: Link2Off,  category: "Protection", note: "Requires bot to be group admin" },
   { key: "antiSticker", label: "Anti Sticker", description: "Auto-delete sticker messages in groups", icon: Sticker,   category: "Protection", note: "Requires bot to be group admin" },
-  { key: "antiTag",     label: "Anti Tag",     description: "Delete mass-mention messages (5+ people tagged at once)", icon: Tag,       category: "Protection", note: "Requires bot to be group admin" },
+  { key: "antiTag",     label: "Anti Tag",     description: "Delete message & instantly kick anyone who tags/mentions members in the group", icon: Tag,       category: "Protection", note: "Requires bot to be group admin" },
   { key: "antiBadWord", label: "Anti Bad Word", description: "Delete message + kick the sender for using bad words", icon: Swords,    category: "Protection", note: "Requires bot to be group admin" },
   { key: "antiSpam",    label: "Anti Spam",    description: "Automatically detect and remove spam messages", icon: Shield,    category: "Protection" },
   { key: "antiDelete",  label: "Anti Delete",  description: "Forward deleted messages to your DM so nothing is lost", icon: Shield,    category: "Protection" },
