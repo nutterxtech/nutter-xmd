@@ -180,15 +180,22 @@ async function handleSetPrefix(ctx: CommandContext) {
 
 COMMANDS["setprefix"] = handleSetPrefix;
 
+function withBlockquote(text: string): string {
+  return text.startsWith("> ") ? text : `> ${text}`;
+}
+
 function blockquoteSock(sock: WASocket): WASocket {
   return new Proxy(sock, {
     get(target, prop, receiver) {
       if (prop === "sendMessage") {
         return async (jid: string, content: Record<string, unknown>, opts?: Record<string, unknown>) => {
-          if (content && typeof content.text === "string") {
-            const raw = content.text;
-            const prefixed = raw.startsWith("> ") ? raw : `> ${raw}`;
-            content = { ...content, text: prefixed };
+          if (content) {
+            if (typeof content.text === "string") {
+              content = { ...content, text: withBlockquote(content.text) };
+            }
+            if (typeof content.caption === "string") {
+              content = { ...content, caption: withBlockquote(content.caption) };
+            }
           }
           return target.sendMessage(jid, content as Parameters<WASocket["sendMessage"]>[1], opts as Parameters<WASocket["sendMessage"]>[2]);
         };

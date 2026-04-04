@@ -3,8 +3,12 @@ import axios from "axios";
 import { execSync } from "child_process";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import type { CommandContext } from "./context";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 let startTime = Date.now();
 export function resetUptime() { startTime = Date.now(); }
@@ -311,7 +315,7 @@ export async function testCommand(ctx: CommandContext) {
     `📡 *Server:* Running\n` +
     `🔋 *Health:* Excellent\n\n` +
     `╚══════════════════╝\n\n` +
-    `> *𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* is alive and ready! ⚡`;
+    `*𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* is alive and ready! ⚡`;
 
   const banner = loadBanner();
   if (banner) {
