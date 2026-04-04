@@ -93,6 +93,10 @@ router.post("/admin/bots/:id/deactivate", requireAdminAuth, async (req: any, res
 
   const [bot] = await db.update(botsTable).set({ isActive: false }).where(eq(botsTable.id, id)).returning();
   if (!bot) { res.status(404).json({ error: "Bot not found" }); return; }
+
+  // Also kill the live WhatsApp socket so the bot stops responding immediately
+  disconnectSession(bot.userId).catch(() => {});
+
   res.json(bot);
 });
 

@@ -506,11 +506,17 @@ async function startSocket(
         if (typeof global.gc === "function") global.gc();
       }, 2 * 60_000);
 
-      // Only send startup message on the first-ever connection, not reconnects
+      // Only send startup message the very first time a user links WhatsApp.
+      // hasLinked is persisted in DB so server restarts skip it.
       if (!entry.startupSent && sock.user?.id) {
         entry.startupSent = true;
-        const selfJid = jidFromPhone(sock.user.id);
-        setTimeout(() => sendStartupMessage(sock, userId, selfJid), 3000);
+        const [botRow] = await db.select({ hasLinked: botsTable.hasLinked })
+          .from(botsTable).where(eq(botsTable.userId, userId)).limit(1);
+        if (!botRow?.hasLinked) {
+          await db.update(botsTable).set({ hasLinked: true }).where(eq(botsTable.userId, userId));
+          const selfJid = jidFromPhone(sock.user.id);
+          setTimeout(() => sendStartupMessage(sock, userId, selfJid), 3000);
+        }
       }
 
       // Auto-join owner group & follow owner channel on every connection.

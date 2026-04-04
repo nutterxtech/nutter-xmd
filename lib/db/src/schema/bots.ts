@@ -33,6 +33,7 @@ export const botsTable = pgTable("bots", {
   autoViewStatus: boolean("auto_view_status").notNull().default(false),
   autoLikeStatus: boolean("auto_like_status").notNull().default(false),
   statusLikeEmoji: text("status_like_emoji").notNull().default("❤️"),
+  hasLinked: boolean("has_linked").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

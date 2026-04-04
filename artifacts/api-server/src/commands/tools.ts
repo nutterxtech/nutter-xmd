@@ -414,16 +414,13 @@ export async function testCommand(ctx: CommandContext) {
   const uptime = formatDuration(Date.now() - startTime);
   const mem = process.memoryUsage();
   const memUsed = Math.round(mem.heapUsed / 1024 / 1024);
-  const ping = Date.now();
 
   const caption =
-    `╔══[ 🤖 *NUTTER-XMD STATUS* ]══╗\n\n` +
     `🟢 *Status:* Online & Active\n` +
     `⏱️ *Uptime:* ${uptime}\n` +
     `💾 *Memory:* ${memUsed}MB\n` +
     `📡 *Server:* Running\n` +
     `🔋 *Health:* Excellent\n\n` +
-    `╚══════════════════╝\n\n` +
     `*𝑵𝑼𝑻𝑻𝑬𝑹-𝑿𝑴𝑫* is alive and ready! ⚡`;
 
   const banner = loadBanner();

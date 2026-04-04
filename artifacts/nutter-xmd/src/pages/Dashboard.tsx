@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useGetMyBot,
   useUpdateMyBot,
@@ -81,6 +81,21 @@ export default function Dashboard() {
   const [prefixInput, setPrefixInput] = useState("");
   const [newBadWord, setNewBadWord] = useState("");
   const [likeEmoji, setLikeEmoji] = useState("");
+
+  // Auto-refresh: poll every 4s while connecting so the UI updates when linking completes
+  const prevStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const status = bot?.status;
+    const isLinking = status === "connecting" || (status === "offline" && !bot?.phoneNumber);
+    if (!isLinking) {
+      prevStatusRef.current = status;
+      return;
+    }
+    const id = setInterval(async () => {
+      await queryClient.invalidateQueries({ queryKey: getGetMyBotQueryKey() });
+    }, 4000);
+    return () => clearInterval(id);
+  }, [bot?.status, bot?.phoneNumber, queryClient]);
 
   const handleToggleFeature = (key: string, value: boolean) => {
     updateBot.mutate(
