@@ -44,18 +44,20 @@ function formatDuration(ms: number): string {
   return `${s}s`;
 }
 
+// Cache the banner buffer so we only read disk once per server lifecycle
+let _bannerCache: Buffer | null | undefined;
 function loadBanner(): Buffer | null {
+  if (_bannerCache !== undefined) return _bannerCache;
   try {
-    const assetPath = join(__dirname, "../assets/menu-banner.jpg");
-    return readFileSync(assetPath);
+    _bannerCache = readFileSync(join(__dirname, "../assets/menu-banner.jpg"));
   } catch {
     try {
-      const distPath = join(process.cwd(), "dist/assets/menu-banner.jpg");
-      return readFileSync(distPath);
+      _bannerCache = readFileSync(join(process.cwd(), "dist/assets/menu-banner.jpg"));
     } catch {
-      return null;
+      _bannerCache = null;
     }
   }
+  return _bannerCache;
 }
 
 export async function pingCommand(ctx: CommandContext) {

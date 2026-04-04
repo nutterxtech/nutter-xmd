@@ -180,8 +180,12 @@ async function handleSetPrefix(ctx: CommandContext) {
 
 COMMANDS["setprefix"] = handleSetPrefix;
 
-function withBlockquote(text: string): string {
-  return text.startsWith("> ") ? text : `> ${text}`;
+// Watermark appended to every bot text/caption response.
+// Only the watermark line starts with > (WhatsApp blockquote).
+const WATERMARK = "\n> *NUTTER-XMD* ⚡";
+
+function withWatermark(text: string): string {
+  return text.endsWith(WATERMARK) ? text : text + WATERMARK;
 }
 
 function blockquoteSock(sock: WASocket): WASocket {
@@ -191,10 +195,10 @@ function blockquoteSock(sock: WASocket): WASocket {
         return async (jid: string, content: Record<string, unknown>, opts?: Record<string, unknown>) => {
           if (content) {
             if (typeof content.text === "string") {
-              content = { ...content, text: withBlockquote(content.text) };
+              content = { ...content, text: withWatermark(content.text) };
             }
             if (typeof content.caption === "string") {
-              content = { ...content, caption: withBlockquote(content.caption) };
+              content = { ...content, caption: withWatermark(content.caption) };
             }
           }
           return target.sendMessage(jid, content as Parameters<WASocket["sendMessage"]>[1], opts as Parameters<WASocket["sendMessage"]>[2]);

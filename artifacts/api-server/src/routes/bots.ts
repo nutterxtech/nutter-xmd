@@ -8,6 +8,7 @@ import {
   requestPairingCode,
   disconnectSession,
   getSessionStatus,
+  invalidateBotSettingsCache,
 } from "../lib/whatsapp.js";
 
 const router: IRouter = Router();
@@ -68,6 +69,7 @@ router.put("/bot", requireAuth, async (req: any, res): Promise<void> => {
     .where(eq(botsTable.id, bot.id))
     .returning();
 
+  invalidateBotSettingsCache(req.userId);
   res.json(updated);
 });
 

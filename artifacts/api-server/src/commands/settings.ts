@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, botsTable } from "@workspace/db";
+import { invalidateBotSettingsCache } from "../lib/whatsapp.js";
 import type { CommandContext } from "./context";
 
 async function getBot(userId: string) {
@@ -9,6 +10,7 @@ async function getBot(userId: string) {
 
 async function updateBot(userId: string, data: Partial<typeof botsTable.$inferInsert>) {
   await db.update(botsTable).set(data).where(eq(botsTable.userId, userId));
+  invalidateBotSettingsCache(userId);
 }
 
 function onOff(v: boolean | null | undefined) {

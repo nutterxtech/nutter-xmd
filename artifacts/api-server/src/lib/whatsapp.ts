@@ -69,12 +69,34 @@ function clearKeepalive(entry: SessionEntry) {
   }
 }
 
-// ─── Bot settings ─────────────────────────────────────────────────────────────
+// ─── Bot settings with short-lived in-memory cache ────────────────────────────
+// Avoids a DB round-trip on every incoming WhatsApp message.
+// TTL is kept short (8 s) so dashboard changes propagate quickly.
 
-async function getBotSettings(userId: string) {
+const SETTINGS_TTL_MS = 8_000;
+type BotSettingsData = {
+  prefix: string; mode: string; autoRead: boolean; typingStatus: boolean;
+  alwaysOnline: boolean; antiCall: boolean; antiLink: boolean;
+  antiSticker: boolean; antiTag: boolean; antiBadWord: boolean; badWords: string;
+  autoReply: boolean; autoReplyMessage: string; welcomeMessage: boolean;
+  goodbyeMessage: boolean; autoViewStatus: boolean; autoLikeStatus: boolean;
+  statusLikeEmoji: string; antiDelete: boolean;
+};
+const _settingsCache = new Map<string, { data: BotSettingsData; expiresAt: number }>();
+
+/** Call this whenever the dashboard saves bot settings so the next message uses fresh data. */
+export function invalidateBotSettingsCache(userId: string) {
+  _settingsCache.delete(userId);
+}
+
+async function getBotSettings(userId: string): Promise<BotSettingsData> {
+  const cached = _settingsCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+
+  let data: BotSettingsData;
   try {
     const [bot] = await db.select().from(botsTable).where(eq(botsTable.userId, userId)).limit(1);
-    return {
+    data = {
       prefix: bot?.prefix ?? ".",
       mode: bot?.mode ?? "public",
       autoRead: bot?.autoRead ?? false,
@@ -97,8 +119,8 @@ async function getBotSettings(userId: string) {
     };
   } catch (err) {
     console.error("[whatsapp] getBotSettings error:", err);
-    return {
-      prefix: "!", mode: "public", autoRead: false, typingStatus: false,
+    data = {
+      prefix: ".", mode: "public", autoRead: false, typingStatus: false,
       alwaysOnline: false, antiCall: false, antiLink: false,
       antiSticker: false, antiTag: false, antiBadWord: false, badWords: "",
       autoReply: false, autoReplyMessage: "", welcomeMessage: false,
@@ -106,6 +128,8 @@ async function getBotSettings(userId: string) {
       statusLikeEmoji: "❤️", antiDelete: false,
     };
   }
+  _settingsCache.set(userId, { data, expiresAt: Date.now() + SETTINGS_TTL_MS });
+  return data;
 }
 
 // ─── Per-session message cache for antidelete ─────────────────────────────────
