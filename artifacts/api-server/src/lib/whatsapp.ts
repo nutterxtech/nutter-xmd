@@ -16,8 +16,8 @@ async function getBaileys() {
   return _baileys;
 }
 import QRCode from "qrcode";
-import { eq } from "drizzle-orm";
-import { db, botsTable, whatsappAuthTable } from "@workspace/db";
+import { eq, lt } from "drizzle-orm";
+import { db, botsTable, whatsappAuthTable, messagesTable } from "@workspace/db";
 import { handleCommand } from "../commands/index";
 
 // ─── Session entry ────────────────────────────────────────────────────────────
@@ -133,11 +133,31 @@ async function getBotSettings(userId: string): Promise<BotSettingsData> {
 }
 
 // ─── Per-session message cache for antidelete ─────────────────────────────────
-// Stores the last N messages per userId so deleted messages can be forwarded to owner.
+// Hot path: in-memory LRU (max 200 msgs per user) for instant reads.
+// Persistence: text/URL content only is written to DB with 20-min TTL so
+// antidelete survives server restarts without storing large media blobs.
 const msgCaches = new Map<string, Map<string, import("@whiskeysockets/baileys").WAMessage>>();
 const MSG_CACHE_MAX = 200;
+const MSG_TTL_MS = 20 * 60 * 1000; // 20 minutes
+
+function extractText(msg: import("@whiskeysockets/baileys").WAMessage): string | null {
+  const m = msg.message;
+  if (!m) return null;
+  const body =
+    m.conversation ||
+    m.extendedTextMessage?.text ||
+    m.imageMessage?.caption ||
+    m.videoMessage?.caption ||
+    m.documentMessage?.caption || null;
+  if (body) return body.slice(0, 2000); // cap to 2 KB
+  // Store URLs found in any field as a fallback
+  const raw = JSON.stringify(m);
+  const urlMatch = /https?:\/\/[^\s"]+/.exec(raw);
+  return urlMatch ? urlMatch[0].slice(0, 500) : null;
+}
 
 function cacheMsg(userId: string, msg: import("@whiskeysockets/baileys").WAMessage) {
+  // In-memory hot cache
   if (!msgCaches.has(userId)) msgCaches.set(userId, new Map());
   const cache = msgCaches.get(userId)!;
   const key = `${msg.key.remoteJid}::${msg.key.id}`;
@@ -146,11 +166,38 @@ function cacheMsg(userId: string, msg: import("@whiskeysockets/baileys").WAMessa
     const first = cache.keys().next().value;
     if (first !== undefined) cache.delete(first);
   }
+
+  // DB persistence — fire-and-forget, text/URL only, no media
+  const text = extractText(msg);
+  if (text && msg.key.remoteJid && msg.key.id) {
+    const expiresAt = new Date(Date.now() + MSG_TTL_MS);
+    db.insert(messagesTable).values({
+      userId,
+      remoteJid: msg.key.remoteJid,
+      messageId: msg.key.id,
+      text,
+      expiresAt,
+    }).onConflictDoNothing().catch(() => {});
+  }
 }
 
 function getCachedMsg(userId: string, remoteJid: string, id: string) {
   return msgCaches.get(userId)?.get(`${remoteJid}::${id}`) ?? null;
 }
+
+// ─── Background message cleanup (every 5 min) ─────────────────────────────────
+setInterval(async () => {
+  try {
+    const deleted = await db.delete(messagesTable)
+      .where(lt(messagesTable.expiresAt, new Date()))
+      .returning({ id: messagesTable.id });
+    if (deleted.length > 0) {
+      console.log(`[messages] Cleaned up ${deleted.length} expired message(s)`);
+    }
+  } catch (err) {
+    console.error("[messages] Cleanup error:", err);
+  }
+}, 5 * 60 * 1000);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
