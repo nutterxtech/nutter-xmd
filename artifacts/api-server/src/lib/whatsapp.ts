@@ -320,17 +320,26 @@ async function useDatabaseAuthState(userId: string) {
     ? JSON.parse(existing.keys, BufferJSON.reviver)
     : {};
 
+  // 🔥 SAFE DB PERSIST (with error handling)
   async function persistToDb() {
-    const credsStr = JSON.stringify(creds, BufferJSON.replacer);
-    const keysStr = JSON.stringify(keysMap, BufferJSON.replacer);
-    await db
-      .insert(whatsappAuthTable)
-      .values({ userId, creds: credsStr, keys: keysStr })
-      .onConflictDoUpdate({
-        target: whatsappAuthTable.userId,
-        set: { creds: credsStr, keys: keysStr },
-      });
+    try {
+      const credsStr = JSON.stringify(creds, BufferJSON.replacer);
+      const keysStr = JSON.stringify(keysMap, BufferJSON.replacer);
+
+      await db
+        .insert(whatsappAuthTable)
+        .values({ userId, creds: credsStr, keys: keysStr })
+        .onConflictDoUpdate({
+          target: whatsappAuthTable.userId,
+          set: { creds: credsStr, keys: keysStr },
+        });
+    } catch (e) {
+      console.error("❌ Persist failed:", e);
+    }
   }
+
+  // 🔥 DEBOUNCE CONTROL (prevents DB overload)
+  let saveTimeout: NodeJS.Timeout | null = null;
 
   const keys = {
     get: async <T extends keyof SignalDataTypeMap>(
@@ -344,9 +353,13 @@ async function useDatabaseAuthState(userId: string) {
       }
       return result;
     },
+
     set: async (data: {
-      [T in keyof SignalDataTypeMap]?: { [id: string]: SignalDataTypeMap[T] | null };
+      [T in keyof SignalDataTypeMap]?: {
+        [id: string]: SignalDataTypeMap[T] | null;
+      };
     }) => {
+      // Update in-memory keys
       for (const type in data) {
         const entries = (data as any)[type];
         for (const id in entries) {
@@ -356,17 +369,39 @@ async function useDatabaseAuthState(userId: string) {
           else delete keysMap[k];
         }
       }
-      await persistToDb();
+
+      // 🔥 DEBOUNCE DB WRITES (IMPORTANT)
+      if (saveTimeout) clearTimeout(saveTimeout);
+
+      saveTimeout = setTimeout(async () => {
+        await persistToDb();
+      }, 2000); // save at most once every 2 seconds
     },
   };
 
-  return { state: { creds, keys }, saveCreds: persistToDb };
+  return {
+    state: { creds, keys },
+
+    // 🔥 ALSO DEBOUNCED SAVE FOR CREDS
+    saveCreds: async () => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+
+      saveTimeout = setTimeout(async () => {
+        await persistToDb();
+      }, 2000);
+    },
+  };
 }
 
 export async function clearDatabaseAuthState(userId: string) {
-  await db.delete(whatsappAuthTable).where(eq(whatsappAuthTable.userId, userId));
+  try {
+    await db
+      .delete(whatsappAuthTable)
+      .where(eq(whatsappAuthTable.userId, userId));
+  } catch (e) {
+    console.error("❌ Failed to clear auth state:", e);
+  }
 }
-
 // ─── Socket lifecycle ─────────────────────────────────────────────────────────
 
 async function startSocket(
