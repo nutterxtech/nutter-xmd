@@ -318,7 +318,13 @@ function unwrapViewOnce(quoted: Record<string, any> | null | undefined) {
 
 export async function vvCommand(ctx: CommandContext) {
   const ci = getQuotedContext(ctx.msg);
-  const vv = unwrapViewOnce(ci?.quotedMessage as any);
+
+  // 🔥 Normalize (handles ephemeral + different wrappers)
+  const quoted =
+    ci?.quotedMessage?.ephemeralMessage?.message ||
+    ci?.quotedMessage;
+
+  const vv = unwrapViewOnce(quoted as any);
 
   if (!vv || (!vv.image && !vv.video && !vv.audio)) {
     return ctx.sock.sendMessage(ctx.jid, {
@@ -327,13 +333,12 @@ export async function vvCommand(ctx: CommandContext) {
   }
 
   try {
-    // Use the original message key so Baileys fetches from the right node
     const fakeMsg = {
       key: {
         remoteJid: ctx.jid,
         fromMe: false,
-        id: ci!.stanzaId!,
-        participant: ci!.participant,
+        id: ci?.stanzaId!,
+        participant: ci?.participant,
       },
       message: vv.image
         ? { imageMessage: vv.image }
@@ -363,10 +368,11 @@ export async function vvCommand(ctx: CommandContext) {
     }
   } catch (e) {
     console.error("[vv]", e);
-    await ctx.sock.sendMessage(ctx.jid, { text: "❌ Failed to reveal view-once. The media may have expired." });
+    await ctx.sock.sendMessage(ctx.jid, {
+      text: "❌ Failed to reveal view-once. The media may have expired.",
+    });
   }
 }
-
 export async function vv2Command(ctx: CommandContext) {
   const ci = getQuotedContext(ctx.msg);
 
