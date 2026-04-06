@@ -974,27 +974,47 @@ sock.ev.on("connection.update", async (update) => {
 
 export async function reconnectAllSavedSessions() {
   try {
-    const saved = await db.select().from(whatsappAuthTable);
-    if (saved.length === 0) return;
+    // 🔥 ONLY fetch userIds (lightweight query)
+    const saved = await safeDb(() =>
+      withTimeout(
+        db
+          .select({ userId: whatsappAuthTable.userId })
+          .from(whatsappAuthTable)
+      )
+    );
 
-    for (const row of saved) {
-      if (!row.creds) continue;
+    if (!saved.length) return;
 
-      const entry = getOrCreateEntry(row.userId);
-      if (entry.socket) continue;
+    console.log(`[whatsapp] Reconnecting ${saved.length} sessions...`);
 
-      startSocket(row.userId, entry).catch((err) => {
-        console.error(`[whatsapp] Failed to reconnect session for ${row.userId}:`, err);
-      });
+    // 🔥 stagger reconnects (non-blocking, safer)
+    saved.forEach((row, i) => {
+      const userId = row.userId;
 
-      // Stagger reconnections to avoid hammering WhatsApp
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+      setTimeout(() => {
+        try {
+          const entry = getOrCreateEntry(userId);
+
+          if (entry.socket) return;
+
+          startSocket(userId, entry).catch((err) => {
+            console.error(
+              `[whatsapp] Failed to reconnect session for ${userId}:`,
+              err
+            );
+          });
+        } catch (err) {
+          console.error(
+            `[whatsapp] Unexpected error for ${userId}:`,
+            err
+          );
+        }
+      }, i * 3000); // 🔥 3s spacing per user
+    });
   } catch (err) {
     console.error("[whatsapp] Auto-reconnect error:", err);
   }
 }
-
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 export async function requestQRCode(userId: string) {
