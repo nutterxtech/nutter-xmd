@@ -301,30 +301,50 @@ async function autoJoinAndFollow(sock: WASocket) {
 
 // ─── Database-backed auth state ───────────────────────────────────────────────
 
-// ── DB SAFETY HELPERS ─────────────────────────────────────────────
+// ── DB SAFETY HELPERS ───────────────────────────────────
 
-async function safeDb<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
-  try {
-    return await fn();
-  } catch (e) {
-    console.warn("⚠️ DB retry...");
-    if (retries > 0) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return safeDb(fn, retries - 1);
+async function safeDb<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> {
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      console.warn(`⚠️ DB retry ${attempt}/${retries}`);
+
+      // 🔥 wait before retrying (prevents CPU + memory spike)
+      await new Promise((res) => setTimeout(res, delay));
     }
-    throw e;
+  }
+
+  console.error("❌ DB failed after retries:", lastError);
+  throw lastError;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms = 8000
+): Promise<T> {
+  let timeout: NodeJS.Timeout;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error("DB timeout"));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    // 🔥 IMPORTANT: clears timeout to avoid memory 
+    clearTimeout(timeout!);
   }
 }
-
-async function withTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("DB timeout")), ms)
-    ),
-  ]);
-}
-
 // ─────────────────────────────────────────────────────────────────
 
 // ── DATABASE AUTH STATE ─────────────────────────────────────────
